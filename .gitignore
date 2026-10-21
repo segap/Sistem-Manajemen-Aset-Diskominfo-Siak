@@ -1,0 +1,47 @@
+*.log
+*.sql
+*.sqlite
+*.zip
+*.rar
+*.7z
+.DS_Store
+.env
+.env.backup
+.env.production
+.phpactor.json
+.phpunit.result.cache
+/.codex
+/.cursor/
+/.idea
+/.nova
+/.phpunit.cache
+/.vscode
+/.zed
+/auth.json
+/node_modules
+/.npm-cache
+/public/build
+/public/fonts-manifest.dev.json
+/public/hot
+/public/storage
+/storage/*.key
+/storage/pail
+/vendor
+_ide_helper.php
+Homestead.json
+Homestead.yaml
+Thumbs.db
+
+# File upload dan dokumen pengguna
+/storage/app/public/*
+!/storage/app/public/.gitignore
+
+# File environment tambahan
+.env.*
+!.env.example
+
+# File upload pada lokasi storage Laravel lainnya
+/storage/app/private/
+/storage/app/*.pdf
+/storage/app/*.xlsx
+/storage/app/*.docx

@@ -1,0 +1,611 @@
+@import "@fontsource/poppins/latin-400.css";
+@import "@fontsource/poppins/latin-500.css";
+@import "@fontsource/poppins/latin-600.css";
+@import "@fontsource/poppins/latin-700.css";
+@import "@fontsource/poppins/latin-800.css";
+@import "tailwindcss";
+
+:root {
+  font-family: 'Poppins', sans-serif;
+  color: #172033;
+  background: #f4f7fb;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  --navy: #0b2b50;
+  --blue: #146bb5;
+  --danger: #b42318;
+  --danger-bg: #fef3f2;
+}
+
+* { box-sizing: border-box; }
+body { min-width: 320px; min-height: 100vh; margin: 0; }
+button, input, select, textarea { font: inherit; }
+button { cursor: pointer; }
+
+.page-action-button {
+  min-height: 36px !important;
+  padding-inline: 13px !important;
+  border-radius: 9px !important;
+  font-size: 12px !important;
+  line-height: 1.2 !important;
+}
+
+.page-action-button .button-plus {
+  font-size: 13px !important;
+  line-height: 1 !important;
+}
+
+.import-excel-button {
+  background-color: #16a34a !important;
+  border-color: #16a34a !important;
+  color: #ffffff !important;
+  box-shadow: 0 8px 18px rgb(22 163 74 / 16%) !important;
+}
+
+.import-excel-button:hover {
+  background-color: #15803d !important;
+  border-color: #15803d !important;
+}
+
+.filter-toolbar input,
+.filter-toolbar select,
+.filter-toolbar button {
+  font-size: 12px !important;
+  line-height: 1.2 !important;
+}
+
+.filter-toolbar input::placeholder {
+  font-size: 12px !important;
+  color: #7d8da2;
+}
+
+.filter-toolbar select {
+  font-weight: 600 !important;
+}
+
+.asset-holder-file-input {
+  font-size: 10px !important;
+  line-height: 1.2 !important;
+}
+
+.asset-holder-file-input::file-selector-button {
+  font-size: 10px !important;
+  line-height: 1.2 !important;
+}
+
+.asset-holder-file-input::-webkit-file-upload-button {
+  font-size: 10px !important;
+  line-height: 1.2 !important;
+}
+
+.alert {
+  margin-bottom: 18px;
+  padding: 13px 15px;
+  border: 1px solid #fecdca;
+  border-radius: 10px;
+  color: var(--danger);
+  background: var(--danger-bg);
+  font-size: 14px;
+}
+
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  border-radius: 12px;
+  background: #e8edf3;
+}
+
+.skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 55%), transparent);
+  animation: shimmer 1.3s infinite;
+}
+
+.table-scroll {
+  overflow-x: auto;
+  margin: 16px;
+  border-radius: 10px;
+}
+
+.data-table {
+  width: 100%;
+  min-width: 760px;
+  border-collapse: collapse;
+}
+
+.data-table th {
+  height: 43px;
+  padding: 0 16px;
+  border: 1px solid #e2e8f0;
+  color: #7a899c;
+  background: #f8fafc;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .02em;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.data-table td {
+  height: 64px;
+  padding: 9px 16px;
+  border: 1px solid #e2e8f0;
+  color: #5e6e81;
+  font-size: 11px;
+}
+
+.data-table .number-column {
+  width: 58px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.data-table tbody tr:hover:not(.table-skeleton) { background: #fbfdff; }
+.data-table td strong { color: #2c4159; font-size: 11px; }
+.data-table th:last-child, .data-table td:last-child { width: 150px; }
+.data-table .status-column, .data-table .action-column { text-align: center; }
+.data-table th:last-child:empty { text-align: center; }
+.data-table th:last-child:empty::after { content: 'Aksi'; }
+.data-table td:has(> .loan-status) { text-align: center; }
+
+.data-table .asset-condition-cell {
+  min-width: 112px;
+  max-width: 132px;
+  text-align: center;
+}
+
+.asset-condition-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  width: 100%;
+  max-width: 100%;
+  margin-inline: auto;
+}
+
+.asset-condition-pill {
+  display: inline-flex;
+  min-width: 0;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  padding: 5px 9px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.asset-condition-cell > .asset-condition-pill {
+  width: fit-content;
+  min-width: 0;
+  justify-content: center;
+}
+
+.asset-condition-pill strong {
+  color: #0b2b50;
+  font-size: 11px;
+  line-height: 1;
+}
+
+.cell-subtitle {
+  display: block;
+  margin-top: 4px;
+  color: #8290a3;
+  font-size: 10px;
+  font-weight: 400;
+}
+
+.code-badge {
+  display: inline-flex;
+  padding: 5px 8px;
+  border-radius: 6px;
+  color: #14649d;
+  background: #e9f3fa;
+  font-family: 'Poppins', sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.icon-value {
+  display: inline-flex;
+  padding: 4px 7px;
+  border: 1px solid #e3e8ef;
+  border-radius: 6px;
+  color: #6b7a8d;
+  background: #fafbfc;
+  font-size: 9px;
+}
+
+.empty-value { color: #b0bac5; }
+
+.description-cell {
+  max-width: 430px;
+  display: block;
+  overflow: hidden;
+  color: #748397;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.row-actions {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+}
+
+.row-actions form {
+  margin: 0;
+}
+
+.row-actions button,
+.row-actions a {
+  width: 31px;
+  height: 31px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid #dbe4ec;
+  border-radius: 7px;
+  color: #43637e;
+  background: white;
+  text-decoration: none;
+}
+
+.row-actions button svg,
+.row-actions a svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.row-actions button:hover,
+.row-actions a:hover {
+  border-color: #7daecc;
+  color: #176a9f;
+}
+
+.row-actions button.danger { color: #b24a42; }
+.row-actions button.danger:hover { border-color: #e4aaa5; background: #fff8f7; }
+
+/* Aksi pada daftar PDF Rekonsiliasi Bulanan menggunakan SVG inline. */
+.report-document-actions > button,
+.report-document-actions > a {
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.report-document-actions > button svg,
+.report-document-actions > a svg {
+  width: 18px !important;
+  height: 18px !important;
+  display: block;
+  flex: none;
+  fill: none !important;
+  stroke: currentColor !important;
+  stroke-width: 2 !important;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.table-pagination {
+  min-height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 18px;
+  border-top: 1px solid #edf1f5;
+  color: #8795a6;
+  font-size: 10px;
+}
+
+.table-pagination > div {
+  display: flex;
+  gap: 6px;
+}
+
+.table-pagination button,
+.table-pagination a {
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid #dce4ec;
+  border-radius: 7px;
+  color: #526980;
+  background: white;
+  font-size: 9px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.table-pagination button:disabled {
+  cursor: not-allowed;
+  opacity: .45;
+}
+
+.per-page-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #718095;
+}
+
+.per-page-control select {
+  height: 34px;
+  min-width: 98px;
+  padding: 0 10px;
+  border: 1px solid #dbe4ee;
+  border-radius: 8px;
+  color: #31445a;
+  background: white;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.table-pagination .pagination-icon-button {
+  width: 34px;
+  min-height: 34px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+}
+
+.pagination-icon-button svg {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.pagination-icon-button:hover:not(:disabled) {
+  border-color: #9eb8d1;
+  color: #176a9f;
+  background: #f7fbff;
+}
+
+.table-empty {
+  min-height: 260px;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  color: #9aa7b5;
+  text-align: center;
+}
+
+.table-empty > span {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 10px;
+  border-radius: 12px;
+  color: #5893bb;
+  background: #edf6fb;
+  font-size: 24px;
+}
+
+.table-empty > span svg {
+  width: 22px;
+  height: 22px;
+  stroke: currentColor;
+  stroke-width: 2;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.table-empty strong { color: #4c6076 !important; font-size: 13px !important; }
+.table-empty p { max-width: 330px; margin: 5px 0; font-size: 10px; }
+
+.table-error {
+  min-height: 320px;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 10px;
+  color: #a24d47;
+  font-size: 11px;
+}
+
+.table-error button {
+  padding: 7px 12px;
+  border: 0;
+  border-radius: 7px;
+  color: white;
+  background: var(--blue);
+  font-size: 10px;
+}
+
+.table-skeleton i {
+  width: 80%;
+  height: 12px;
+  display: block;
+  overflow: hidden;
+  border-radius: 4px;
+  background: #edf1f5;
+  animation: skeletonFade 1s ease-in-out infinite alternate;
+}
+
+.condition-badge,
+.loan-status {
+  display: inline-flex;
+  padding: 5px 9px;
+  border-radius: 999px;
+  color: #475569;
+  background: #eef2f7;
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.approval-status-badge {
+  width: fit-content;
+  max-width: 100%;
+  padding: 6px 10px;
+  justify-self: start;
+}
+
+.condition-baik { color: #166534; background: #dcfce7; }
+.condition-lightly_damaged,
+.condition-rusak_ringan { color: #92400e; background: #fef3c7; }
+.condition-rusak_sedang { color: #9a3412; background: #ffedd5; }
+.condition-rusak_berat,
+.condition-rusak_berat,
+.condition-hilang { color: #991b1b; background: #fee2e2; }
+
+.status-diajukan,
+.status-dipesan,
+.status-diterima { color: #1d4f91; background: #dbeafe; }
+.status-disetujui,
+.status-disetujui_kasubbag,
+.status-terverifikasi,
+.status-terverifikasi_tim_aset { color: #166534; background: #dcfce7; }
+.status-ditolak { color: #991b1b; background: #fee2e2; }
+.status-stok-menipis { color: #92400e; background: #fef3c7; }
+.status-dipinjam { color: #92400e; background: #fef3c7; }
+.status-dikembalikan { color: #475569; background: #e2e8f0; }
+.status-submitted { color: #1d4f91; background: #dbeafe; }
+.status-approved { color: #166534; background: #dcfce7; }
+.status-rejected { color: #991b1b; background: #fee2e2; }
+
+.overdue-label {
+  display: block;
+  margin-top: 4px;
+  color: #b42318;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.approval-type {
+  display: inline-flex;
+  padding: 5px 8px;
+  border-radius: 7px;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.type-loan { color: #1d4f91; background: #dbeafe; }
+.type-procurement { color: #166534; background: #dcfce7; }
+.type-disposal { color: #991b1b; background: #fee2e2; }
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 7px 10px;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.status-pill.success { color: #067742; background: #dcf8e9; }
+.status-pill.menunggu_verifikasi { color: #0c5d9d; background: #e8f3ff; }
+
+.dashboard-inventory-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #b8c6d6 transparent;
+}
+
+.dashboard-inventory-scroll::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.dashboard-inventory-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.dashboard-inventory-scroll::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: #c7d2df;
+}
+
+.dashboard-inventory-scroll::-webkit-scrollbar-thumb:hover {
+  background: #aab9c8;
+}
+
+.dashboard-inventory-scroll::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+.dashboard-inventory-scroll thead {
+  z-index: 1;
+  box-shadow: 0 1px 0 #edf1f5;
+}
+
+[data-stock-status-filter],
+[data-stock-status-filter] option {
+  font-size: 11px;
+}
+
+.dashboard-category-table-scroll thead {
+  box-shadow: none;
+}
+
+.dashboard-category-table-scroll th {
+  background: #f8fafc;
+}
+
+.dashboard-category-sticky-first,
+.dashboard-category-sticky-second {
+  position: sticky;
+  z-index: 2;
+}
+
+.dashboard-category-sticky-first {
+  top: 0;
+}
+
+.dashboard-category-sticky-second {
+  top: 30px;
+  box-shadow: 0 1px 0 #edf1f5;
+}
+
+@keyframes shimmer { to { transform: translateX(100%); } }
+@keyframes skeletonFade { to { opacity: .45; } }
+
+@keyframes modalBackdropIn {
+  from { background: rgb(5 22 38 / 0%); }
+  to { background: rgb(5 22 38 / 48%); }
+}
+
+@keyframes modalZoomIn {
+  from { opacity: 0; transform: scale(.9); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: .01ms !important;
+    transition-duration: .01ms !important;
+  }
+}
+
+@media (max-width: 580px) {
+  .table-scroll { margin: 10px; }
+  .table-pagination {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 10px;
+  }
+}
