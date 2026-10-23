@@ -145,7 +145,7 @@ class ReportDocumentController extends Controller
             ]);
         }
 
-        $this->authorizeReport($request, $config);
+        $this->authorizeReportView($request, $jenis, $config);
 
         $year = $request->integer('tahun', now()->year);
         $isAssetHolderArchive = $this->isAssetHolderArchive($config);
@@ -435,6 +435,24 @@ class ReportDocumentController extends Controller
             : [UserRole::SuperAdmin->value, UserRole::Admin->value, UserRole::TimAset->value, UserRole::KasubbagUmumPerencanaan->value];
 
         abort_unless(in_array($role, $allowed, true), Response::HTTP_FORBIDDEN, 'Anda tidak memiliki akses ke dokumen laporan ini.');
+    }
+
+    private function authorizeReportView(Request $request, string $jenis, array $config): void
+    {
+        $permission = match ($jenis) {
+            'rekonsiliasi-bulanan' => 'laporan_rekonsiliasi_bulanan.view',
+            'semester-1' => 'laporan_semester_1.view',
+            'tahunan' => 'laporan_tahunan.view',
+            'aset-unaudited' => 'laporan_aset_unaudited.view',
+            'aset-audited' => 'laporan_aset_audited.view',
+            'berita-acara-bmd', 'berita-acara-pemakaian-bmd', 'berita-acara-serah-terima' => 'berita_acara_bmd.view',
+            'persediaan-bulanan' => 'laporan_persediaan_bulanan.view',
+            'persediaan-semester-1' => 'laporan_persediaan_semester_1.view',
+            'persediaan-tahunan' => 'laporan_persediaan_tahunan.view',
+            default => null,
+        };
+
+        abort_unless($permission && $request->user()?->hasPermission($permission), Response::HTTP_FORBIDDEN, 'Anda tidak memiliki akses ke dokumen laporan ini.');
     }
 
     private function canUpload(Request $request, array $config): bool

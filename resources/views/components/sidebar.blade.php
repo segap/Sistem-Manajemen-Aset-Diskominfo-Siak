@@ -150,9 +150,33 @@
         ? request()->path() === trim($url, '/') || request()->is(trim($url, '/').'/*')
         : false;
     $viewPermissions = [
-        '/dashboard' => 'dashboard.view', '/aset' => 'aset.view', '/kategori-aset' => 'kategori_aset.view',
-        '/kodefikasi' => 'kodefikasi.view', '/kodefikasi-internal' => 'kodefikasi_internal.view',
-        '/ruangan' => 'ruangan.view', '/kategori-stock-opname' => 'kategori_stock_opname.view',
+        '/dashboard' => 'dashboard.view',
+        '/aset' => 'aset.view',
+        '/kategori-aset' => 'kategori_aset.view',
+        '/kodefikasi' => 'kodefikasi.view',
+        '/kodefikasi-internal' => 'kodefikasi_internal.view',
+        '/ruangan' => 'ruangan.view',
+        '/kir' => 'kir.view',
+        '/stock-opname' => 'stock_opname.view',
+        '/kategori-stock-opname' => 'kategori_stock_opname.view',
+        '/permintaan-persediaan' => 'permintaan.view',
+        '/peminjaman' => 'peminjaman.view',
+        '/pemeliharaan-aset' => 'pemeliharaan.view',
+        '/persetujuan' => 'persetujuan.view',
+        '/usulan-pengadaan' => 'usulan_pengadaan.view',
+        '/pengadaan' => 'pengadaan.view',
+        '/penghapusan-aset' => 'penghapusan.view',
+        '/laporan' => 'laporan_aset.view',
+        '/laporan-dokumen/rekonsiliasi-bulanan' => 'laporan_rekonsiliasi_bulanan.view',
+        '/laporan-dokumen/semester-1' => 'laporan_semester_1.view',
+        '/laporan-dokumen/tahunan' => 'laporan_tahunan.view',
+        '/laporan-dokumen/aset-unaudited' => 'laporan_aset_unaudited.view',
+        '/laporan-dokumen/aset-audited' => 'laporan_aset_audited.view',
+        '/laporan-dokumen/berita-acara-bmd' => 'berita_acara_bmd.view',
+        '/laporan-dokumen/persediaan-bulanan' => 'laporan_persediaan_bulanan.view',
+        '/laporan-dokumen/persediaan-semester-1' => 'laporan_persediaan_semester_1.view',
+        '/laporan-dokumen/persediaan-tahunan' => 'laporan_persediaan_tahunan.view',
+        '/roles' => 'roles.view',
     ];
     $canView = fn (string $permission): bool => $user?->hasPermission($permission) ?? false;
     $usesDynamicSource = ! array_key_exists($role, $menus) || $role === 'pimpinan';

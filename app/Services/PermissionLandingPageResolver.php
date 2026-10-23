@@ -17,7 +17,17 @@ class PermissionLandingPageResolver
         ['route' => 'kodefikasi.index', 'permission' => 'kodefikasi.view'],
         ['route' => 'kodefikasi-internal.index', 'permission' => 'kodefikasi_internal.view'],
         ['route' => 'ruangan.index', 'permission' => 'ruangan.view'],
+        ['route' => 'kir.index', 'permission' => 'kir.view'],
         ['route' => 'kategori-stock-opname.index', 'permission' => 'kategori_stock_opname.view'],
+        ['route' => 'stock-opname.index', 'permission' => 'stock_opname.view'],
+        ['route' => 'permintaan-persediaan.index', 'permission' => 'permintaan.view'],
+        ['route' => 'web.peminjaman.index', 'permission' => 'peminjaman.view'],
+        ['route' => 'pemeliharaan-aset.index', 'permission' => 'pemeliharaan.view'],
+        ['route' => 'persetujuan.index', 'permission' => 'persetujuan.view'],
+        ['route' => 'web.usulan-pengadaan.index', 'permission' => 'usulan_pengadaan.view'],
+        ['route' => 'pengadaan.index', 'permission' => 'pengadaan.view'],
+        ['route' => 'penghapusan-aset.index', 'permission' => 'penghapusan.view'],
+        ['route' => 'laporan.index', 'permission' => 'laporan_aset.view'],
         ['route' => 'web.roles.index', 'permission' => 'roles.view'],
     ];
 
@@ -36,7 +46,22 @@ class PermissionLandingPageResolver
         'kodefikasi.index' => 'kodefikasi.view',
         'kodefikasi-internal.index' => 'kodefikasi_internal.view',
         'ruangan.index' => 'ruangan.view',
+        'kir.index' => 'kir.view',
+        'kir.show' => 'kir.view',
         'kategori-stock-opname.index' => 'kategori_stock_opname.view',
+        'stock-opname.index' => 'stock_opname.view',
+        'permintaan-persediaan.index' => 'permintaan.view',
+        'web.peminjaman.index' => 'peminjaman.view',
+        'web.peminjaman.show' => 'peminjaman.view',
+        'pemeliharaan-aset.index' => 'pemeliharaan.view',
+        'persetujuan.index' => 'persetujuan.view',
+        'web.usulan-pengadaan.index' => 'usulan_pengadaan.view',
+        'web.usulan-pengadaan.show' => 'usulan_pengadaan.view',
+        'pengadaan.index' => 'pengadaan.view',
+        'pengadaan.show' => 'pengadaan.view',
+        'penghapusan-aset.index' => 'penghapusan.view',
+        'penghapusan-aset.show' => 'penghapusan.view',
+        'laporan.index' => 'laporan_aset.view',
         'web.roles.index' => 'roles.view',
     ];
 
@@ -75,6 +100,21 @@ class PermissionLandingPageResolver
         }
 
         $permission = self::INTENDED_ROUTE_PERMISSIONS[$matchedRoute->getName()] ?? null;
+
+        if ($matchedRoute->getName() === 'laporan-dokumen.index') {
+            $permission = match (trim($path, '/')) {
+                'laporan-dokumen/rekonsiliasi-bulanan' => 'laporan_rekonsiliasi_bulanan.view',
+                'laporan-dokumen/semester-1' => 'laporan_semester_1.view',
+                'laporan-dokumen/tahunan' => 'laporan_tahunan.view',
+                'laporan-dokumen/aset-unaudited' => 'laporan_aset_unaudited.view',
+                'laporan-dokumen/aset-audited' => 'laporan_aset_audited.view',
+                'laporan-dokumen/berita-acara-bmd', 'laporan-dokumen/berita-acara-pemakaian-bmd', 'laporan-dokumen/berita-acara-serah-terima' => 'berita_acara_bmd.view',
+                'laporan-dokumen/persediaan-bulanan' => 'laporan_persediaan_bulanan.view',
+                'laporan-dokumen/persediaan-semester-1' => 'laporan_persediaan_semester_1.view',
+                'laporan-dokumen/persediaan-tahunan' => 'laporan_persediaan_tahunan.view',
+                default => null,
+            };
+        }
 
         if (! $permission || ! $user->hasPermission($permission)) {
             return null;

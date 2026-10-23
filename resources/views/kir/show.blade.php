@@ -4,6 +4,7 @@
 
 @php
     $canManageKir = in_array(auth()->user()?->role, ['admin', 'super_admin'], true);
+    $canExportKir = auth()->user()?->hasPermission('kir.export') ?? false;
     $numberStart = ($details->currentPage() - 1) * $details->perPage();
     $selectedPerPage = (int) request('per_page', $details->perPage());
     $openModal = old('_modal');
@@ -19,11 +20,13 @@
         </div>
         @if ($canManageKir)
             <div class="flex flex-wrap justify-end gap-2 max-[680px]:grid max-[680px]:grid-cols-2">
-                <a class="page-action-button inline-flex min-h-[38px] items-center justify-center rounded-[9px] border border-[#dbe3eb] bg-white px-3.5 text-[10px] font-bold text-[#5e7084] no-underline transition hover:border-[#b8c6d6] hover:bg-[#f8fafc]" href="{{ route('kir.pdf', $ruangan) }}">Unduh PDF</a>
-                <a class="page-action-button inline-flex min-h-[38px] items-center justify-center rounded-[9px] border border-[#dbe3eb] bg-white px-3.5 text-[10px] font-bold text-[#5e7084] no-underline transition hover:border-[#b8c6d6] hover:bg-[#f8fafc]" href="{{ route('kir.word', $ruangan) }}">Unduh Word</a>
+                @if ($canExportKir)
+                    <a class="page-action-button inline-flex min-h-[38px] items-center justify-center rounded-[9px] border border-[#dbe3eb] bg-white px-3.5 text-[10px] font-bold text-[#5e7084] no-underline transition hover:border-[#b8c6d6] hover:bg-[#f8fafc]" href="{{ route('kir.pdf', $ruangan) }}">Unduh PDF</a>
+                    <a class="page-action-button inline-flex min-h-[38px] items-center justify-center rounded-[9px] border border-[#dbe3eb] bg-white px-3.5 text-[10px] font-bold text-[#5e7084] no-underline transition hover:border-[#b8c6d6] hover:bg-[#f8fafc]" href="{{ route('kir.word', $ruangan) }}">Unduh Word</a>
+                @endif
                 <button class="page-action-button import-excel-button inline-flex min-h-[38px] items-center justify-center rounded-[9px] border-0 px-3.5 text-[10px] font-bold text-white transition" type="button" data-modal-open="import-kir">Import Excel</button>
             </div>
-        @else
+        @elseif ($canExportKir)
             <div class="flex flex-wrap justify-end gap-2 max-[680px]:grid max-[680px]:grid-cols-2">
                 <a class="page-action-button inline-flex min-h-[38px] items-center justify-center rounded-[9px] border border-[#dbe3eb] bg-white px-3.5 text-[10px] font-bold text-[#5e7084] no-underline transition hover:border-[#b8c6d6] hover:bg-[#f8fafc]" href="{{ route('kir.pdf', $ruangan) }}">Unduh PDF</a>
                 <a class="page-action-button inline-flex min-h-[38px] items-center justify-center rounded-[9px] border border-[#dbe3eb] bg-white px-3.5 text-[10px] font-bold text-[#5e7084] no-underline transition hover:border-[#b8c6d6] hover:bg-[#f8fafc]" href="{{ route('kir.word', $ruangan) }}">Unduh Word</a>

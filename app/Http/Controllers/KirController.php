@@ -31,8 +31,6 @@ class KirController extends Controller
 
     public function index(Request $request)
     {
-        $this->syncAllKirDetails();
-
         $perPage = (int) $request->integer('per_page', 10);
         $perPage = in_array($perPage, [10, 25, 50, 100], true) ? $perPage : 10;
         $search = trim((string) $request->query('search', ''));
@@ -59,8 +57,8 @@ class KirController extends Controller
 
     public function show(Request $request, Ruangan $ruangan)
     {
-        $kir = $this->ensureKir($ruangan);
-        $this->syncKirDetails($kir);
+        // Read routes must not create, update, or synchronize KIR data.
+        $kir = $ruangan->kir()->firstOrFail();
 
         $perPage = (int) $request->integer('per_page', 10);
         $perPage = in_array($perPage, [10, 25, 50, 100], true) ? $perPage : 10;
@@ -94,6 +92,17 @@ class KirController extends Controller
         $satuanOptions = $this->satuanOptions;
 
         return view('kir.show', compact('ruangan', 'kir', 'details', 'assets', 'kodeBarangOptions', 'kodeLokasiOptions', 'satuanOptions'));
+    }
+
+    /**
+     * Explicit maintenance operation. This deliberately remains outside of the
+     * read flow and is only exposed through an admin-protected POST route.
+     */
+    public function synchronize(): RedirectResponse
+    {
+        $this->syncAllKirDetails();
+
+        return redirect()->route('kir.index')->with('success', 'Data KIR berhasil disinkronkan.');
     }
 
     public function store(KirDetailRequest $request, Ruangan $ruangan): RedirectResponse

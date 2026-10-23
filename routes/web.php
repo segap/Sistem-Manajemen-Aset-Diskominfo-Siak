@@ -83,9 +83,9 @@ Route::get('/dashboard', DashboardController::class)
     ->middleware(['auth', 'permission:dashboard.view'])
     ->name('dashboard');
 
-Route::middleware(['auth', 'role:admin,super_admin,tim_aset,timaset_persediaan,tim_aset_persediaan'])->group(function () {
-    Route::get('/stock-opname', [StockOpnameController::class, 'index'])->name('stock-opname.index');
-});
+Route::get('/stock-opname', [StockOpnameController::class, 'index'])
+    ->middleware(['auth', 'permission:stock_opname.view'])
+    ->name('stock-opname.index');
 
 Route::middleware(['auth', 'permission:kategori_stock_opname.view'])->group(function () {
     Route::get('/kategori-stock-opname', [KategoriStockOpnameController::class, 'index'])->name('kategori-stock-opname.index');
@@ -118,9 +118,9 @@ Route::delete('/stock-opname/{stockOpnameItem}', [StockOpnameController::class, 
     ->name('stock-opname.destroy')
     ->whereNumber('stockOpnameItem');
 
-Route::middleware(['auth', 'role:admin_bidang,timaset_persediaan,tim_aset_persediaan,super_admin'])->group(function () {
-    Route::get('/permintaan-persediaan', [PermintaanPersediaanController::class, 'index'])->name('permintaan-persediaan.index');
-});
+Route::get('/permintaan-persediaan', [PermintaanPersediaanController::class, 'index'])
+    ->middleware(['auth', 'permission:permintaan.view'])
+    ->name('permintaan-persediaan.index');
 
 Route::post('/permintaan-persediaan', [PermintaanPersediaanController::class, 'store'])
     ->middleware(['auth', 'role:admin_bidang,super_admin'])
@@ -157,11 +157,15 @@ Route::middleware(['auth', 'role:admin'])->group(function () {
     Route::delete('/ruangan/{ruangan}', [RuanganController::class, 'destroy'])->name('ruangan.destroy')->whereNumber('ruangan');
 });
 
-Route::middleware(['auth', 'role:admin'])->group(function () {
+Route::middleware(['auth', 'permission:kir.view'])->group(function () {
     Route::get('/kir', [KirController::class, 'index'])->name('kir.index');
+    Route::get('/kir/{ruangan}', [KirController::class, 'show'])->name('kir.show')->whereNumber('ruangan');
+});
+
+Route::middleware(['auth', 'role:admin'])->group(function () {
     Route::get('/kir/{ruangan}/pdf', [KirController::class, 'pdf'])->name('kir.pdf')->whereNumber('ruangan');
     Route::get('/kir/{ruangan}/word', [KirController::class, 'word'])->name('kir.word')->whereNumber('ruangan');
-    Route::get('/kir/{ruangan}', [KirController::class, 'show'])->name('kir.show')->whereNumber('ruangan');
+    Route::post('/kir/sinkronisasi', [KirController::class, 'synchronize'])->name('kir.synchronize');
 });
 
 Route::middleware(['auth', 'role:admin'])->group(function () {
@@ -194,7 +198,7 @@ Route::middleware(['auth', 'permission:aset.view'])->group(function () {
     });
 });
 
-Route::middleware(['auth', 'role:admin,admin_bidang'])->group(function () {
+Route::middleware(['auth', 'permission:peminjaman.view'])->group(function () {
     Route::get('/peminjaman', [LoanRequestController::class, 'index'])->name('web.peminjaman.index');
     Route::get('/peminjaman/{loanRequest}', [LoanRequestController::class, 'show'])->name('web.peminjaman.show')->whereNumber('loanRequest');
 });
@@ -228,11 +232,14 @@ Route::delete('/peminjaman/{loanRequest}', [LoanRequestController::class, 'destr
     ->whereNumber('loanRequest');
 
 Route::middleware(['auth', 'role:admin,admin_bidang,tim_aset,super_admin'])->group(function () {
-    Route::get('/pemeliharaan-aset', [AssetMaintenanceController::class, 'index'])->name('pemeliharaan-aset.index');
     Route::get('/pemeliharaan-aset/{assetMaintenance}/berita-acara', [AssetMaintenanceController::class, 'pdf'])->name('pemeliharaan-aset.pdf')->whereNumber('assetMaintenance');
     Route::get('/pemeliharaan-aset/{assetMaintenance}/berita-acara/word', [AssetMaintenanceController::class, 'word'])->name('pemeliharaan-aset.word')->whereNumber('assetMaintenance');
     Route::get('/pemeliharaan-aset/dokumen/{document}', [AssetMaintenanceController::class, 'downloadDocument'])->name('pemeliharaan-aset.document')->whereNumber('document');
 });
+
+Route::get('/pemeliharaan-aset', [AssetMaintenanceController::class, 'index'])
+    ->middleware(['auth', 'permission:pemeliharaan.view'])
+    ->name('pemeliharaan-aset.index');
 
 Route::post('/pemeliharaan-aset', [AssetMaintenanceController::class, 'store'])
     ->middleware(['auth', 'role:admin_bidang,tim_aset,super_admin'])
@@ -268,7 +275,7 @@ Route::patch('/pemeliharaan-aset/{assetMaintenance}/berita-acara', [AssetMainten
     ->name('pemeliharaan-aset.report-data')
     ->whereNumber('assetMaintenance');
 
-Route::middleware(['auth', 'role:admin,admin_bidang,tim_aset'])->group(function () {
+Route::middleware(['auth', 'permission:usulan_pengadaan.view'])->group(function () {
     Route::get('/usulan-pengadaan', [ProcurementProposalController::class, 'index'])->name('web.usulan-pengadaan.index');
     Route::get('/usulan-pengadaan/{procurementProposal}', [ProcurementProposalController::class, 'show'])
         ->name('web.usulan-pengadaan.show')
@@ -289,7 +296,7 @@ Route::patch('/usulan-pengadaan/{procurementProposal}/keputusan-kasubbag', [Proc
     ->name('web.usulan-pengadaan.keputusan-kasubbag')
     ->whereNumber('procurementProposal');
 
-Route::middleware(['auth', 'role:admin,tim_aset'])->group(function () {
+Route::middleware(['auth', 'permission:pengadaan.view'])->group(function () {
     Route::get('/pengadaan', [ProcurementController::class, 'index'])->name('pengadaan.index');
     Route::get('/pengadaan/{procurement}', [ProcurementController::class, 'show'])->name('pengadaan.show')->whereNumber('procurement');
 });
@@ -308,25 +315,28 @@ Route::patch('/pengadaan/{procurement}/verifikasi', [ProcurementController::clas
     ->name('pengadaan.verifikasi')
     ->whereNumber('procurement');
 
-Route::middleware(['auth', 'role:admin,tim_aset,kasubbag_umum_perencanaan'])->group(function () {
+Route::middleware(['auth', 'permission:penghapusan.view'])->group(function () {
     Route::get('/penghapusan-aset', [AssetDisposalRequestController::class, 'index'])->name('penghapusan-aset.index');
     Route::get('/penghapusan-aset/aset/{asset}/bukti', [AssetDisposalRequestController::class, 'assetEvidence'])
         ->name('penghapusan-aset.asset-evidence')
         ->whereNumber('asset');
-    Route::get('/penghapusan-aset/bukti/{evidence}', [AssetDisposalRequestController::class, 'downloadEvidence'])
-        ->name('penghapusan-aset.bukti')
-        ->whereNumber('evidence');
     Route::get('/penghapusan-aset/bukti/{evidence}/preview', [AssetDisposalRequestController::class, 'previewEvidence'])
         ->name('penghapusan-aset.bukti.preview')
         ->whereNumber('evidence');
     Route::get('/penghapusan-aset/{assetDisposalRequest}', [AssetDisposalRequestController::class, 'show'])
         ->name('penghapusan-aset.show')
         ->whereNumber('assetDisposalRequest');
-    Route::get('/penghapusan-aset/{assetDisposalRequest}/dokumen', [AssetDisposalRequestController::class, 'downloadDocument'])
-        ->name('penghapusan-aset.dokumen')
-        ->whereNumber('assetDisposalRequest');
     Route::get('/penghapusan-aset/{assetDisposalRequest}/dokumen/preview', [AssetDisposalRequestController::class, 'previewDocument'])
         ->name('penghapusan-aset.dokumen.preview')
+        ->whereNumber('assetDisposalRequest');
+});
+
+Route::middleware(['auth', 'role:admin,tim_aset,kasubbag_umum_perencanaan'])->group(function () {
+    Route::get('/penghapusan-aset/bukti/{evidence}', [AssetDisposalRequestController::class, 'downloadEvidence'])
+        ->name('penghapusan-aset.bukti')
+        ->whereNumber('evidence');
+    Route::get('/penghapusan-aset/{assetDisposalRequest}/dokumen', [AssetDisposalRequestController::class, 'downloadDocument'])
+        ->name('penghapusan-aset.dokumen')
         ->whereNumber('assetDisposalRequest');
 });
 
@@ -340,14 +350,15 @@ Route::patch('/penghapusan-aset/{assetDisposalRequest}/keputusan', [AssetDisposa
     ->whereNumber('assetDisposalRequest');
 
 Route::middleware(['auth', 'role:admin'])->group(function () {
-    Route::get('/laporan', [AssetReportController::class, 'index'])->name('laporan.index');
     Route::get('/laporan/aset/pdf', [AssetReportController::class, 'pdf'])->name('laporan.aset.pdf');
     Route::get('/laporan/aset/xlsx', [AssetReportController::class, 'xlsx'])->name('laporan.aset.xlsx');
 });
 
+Route::get('/laporan', [AssetReportController::class, 'index'])
+    ->middleware(['auth', 'permission:laporan_aset.view'])
+    ->name('laporan.index');
+
 Route::middleware(['auth', 'role:admin,super_admin,tim_aset,kasubbag_umum_perencanaan,timaset_persediaan,tim_aset_persediaan,aset-persediaan'])->group(function () {
-    Route::get('/laporan-dokumen/{jenis}', [ReportDocumentController::class, 'index'])
-        ->name('laporan-dokumen.index');
     Route::post('/laporan-dokumen/{jenis}', [ReportDocumentController::class, 'store'])
         ->name('laporan-dokumen.store');
     Route::patch('/laporan-dokumen/file/{document}/berita-acara', [ReportDocumentController::class, 'completeBeritaAcara'])
@@ -363,6 +374,10 @@ Route::middleware(['auth', 'role:admin,super_admin,tim_aset,kasubbag_umum_perenc
         ->name('laporan-dokumen.destroy')
         ->whereNumber('document');
 });
+
+Route::get('/laporan-dokumen/{jenis}', [ReportDocumentController::class, 'index'])
+    ->middleware('auth')
+    ->name('laporan-dokumen.index');
 
 Route::middleware(['auth', 'role:admin,super_admin,tim_aset,kasubbag_umum_perencanaan'])->group(function () {
     Route::get('/pemegang-aset', [AssetHolderController::class, 'index'])->name('pemegang-aset.index');
@@ -405,7 +420,7 @@ Route::middleware(['auth', 'role:super_admin'])->group(function () {
 });
 
 Route::get('/persetujuan', ApprovalController::class)
-    ->middleware(['auth', 'role:admin,kasubbag_umum_perencanaan'])
+    ->middleware(['auth', 'permission:persetujuan.view'])
     ->name('persetujuan.index');
 
 Route::delete('/persetujuan/{type}/{id}', [ApprovalController::class, 'destroy'])

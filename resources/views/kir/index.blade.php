@@ -5,6 +5,8 @@
 @php
     $numberStart = ($ruangan->currentPage() - 1) * $ruangan->perPage();
     $selectedPerPage = (int) request('per_page', $ruangan->perPage());
+    $canExportKir = auth()->user()?->hasPermission('kir.export') ?? false;
+    $canSynchronizeKir = in_array(auth()->user()?->role, ['admin', 'super_admin'], true);
 @endphp
 
 @section('content')
@@ -30,8 +32,18 @@
             </div>
             <button class="page-action-button inline-flex min-h-[38px] items-center justify-center rounded-[9px] border-0 bg-[#146bb5] px-3.5 text-[10px] font-bold text-white shadow-[0_8px_18px_rgb(20_107_181_/_16%)] transition hover:bg-[#0c568f]" type="submit">Cari</button>
             <a class="page-action-button inline-flex min-h-[38px] items-center justify-center rounded-[9px] border border-[#dbe3eb] bg-white px-3.5 text-[10px] font-bold text-[#5e7084] no-underline transition hover:border-[#b8c6d6] hover:bg-[#f8fafc]" href="{{ route('kir.index') }}">Reset</a>
-            <x-export-dropdown dataset="kir" />
+            @if ($canExportKir)
+                <x-export-dropdown dataset="kir" />
+            @endif
+            @if ($canSynchronizeKir)
+                <button class="page-action-button inline-flex min-h-[38px] items-center justify-center rounded-[9px] border border-[#dbe3eb] bg-white px-3.5 text-[10px] font-bold text-[#5e7084] transition hover:border-[#b8c6d6] hover:bg-[#f8fafc]" type="submit" form="kir-sync-form">Sinkronkan KIR</button>
+            @endif
         </form>
+        @if ($canSynchronizeKir)
+            <form id="kir-sync-form" method="POST" action="{{ route('kir.synchronize') }}" class="hidden">
+                @csrf
+            </form>
+        @endif
 
         <div class="table-scroll">
             <table class="data-table">

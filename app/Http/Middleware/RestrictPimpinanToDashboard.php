@@ -15,21 +15,10 @@ class RestrictPimpinanToDashboard
      */
     public function handle(Request $request, Closure $next): Response
     {
-        $user = $request->user();
-
-        if ($user?->is_active && $user->role === 'pimpinan') {
-            abort_unless(
-                $request->routeIs(
-                    'dashboard', 'login', 'web.login', 'web.logout',
-                    'web.aset.index', 'web.aset.show', 'web.aset.qr.svg',
-                    'web.kategori-aset.index', 'kodefikasi.index', 'kodefikasi-internal.index',
-                    'ruangan.index', 'kategori-stock-opname.index',
-                ),
-                Response::HTTP_FORBIDDEN,
-                'Role Pimpinan hanya dapat mengakses fitur yang telah diberikan kepadanya.',
-            );
-        }
-
+        // Permission middleware is the single source of truth for read routes.
+        // Keeping a static route allowlist here caused Pimpinan to be denied even
+        // after an administrator explicitly granted a `.view` permission. Write
+        // routes still retain their existing role/action middleware.
         return $next($request);
     }
 }

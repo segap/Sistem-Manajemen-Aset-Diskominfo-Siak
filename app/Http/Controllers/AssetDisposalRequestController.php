@@ -332,12 +332,7 @@ class AssetDisposalRequestController extends Controller
     private function authorizeView(Request $request): void
     {
         abort_unless(
-            in_array($this->roleValue($request->user()?->role), [
-                UserRole::Admin->value,
-                UserRole::TimAset->value,
-                UserRole::KasubbagUmumPerencanaan->value,
-                UserRole::SuperAdmin->value,
-            ], true),
+            $request->user()?->hasPermission('penghapusan.view'),
             403,
             'Anda tidak memiliki akses ke penghapusan aset.',
         );
