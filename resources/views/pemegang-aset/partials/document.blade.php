@@ -5,7 +5,7 @@
 <html lang="id">
 <head>
     <meta charset="UTF-8">
-    <title>Data Pemegang Aset - {{ $holder->nama_pegawai }}</title>
+    <title>Data Pegawai - {{ $holder->nama_pegawai }}</title>
     <style>
         @page { size: A4 landscape; margin: 12mm; }
         * { box-sizing: border-box; }
@@ -38,10 +38,10 @@
     </style>
 </head>
 <body>
-    <h1>DATA PEMEGANG ASET</h1>
+    <h1>DATA PEGAWAI</h1>
     <div class="subtitle">Dinas Komunikasi dan Informatika Kabupaten Siak</div>
 
-    <h2>A. Informasi Pemegang Aset</h2>
+    <h2>A. Informasi Pegawai</h2>
     <table class="profile">
         <tr>
             <td class="photo" rowspan="2">

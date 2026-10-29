@@ -18,6 +18,7 @@ class Ruangan extends Model
         'kode_lokasi_id',
         'nama_ruangan',
         'penanggung_jawab_id',
+        'pemegang_aset_id',
         'keterangan',
         'status',
     ];
@@ -32,6 +33,11 @@ class Ruangan extends Model
     public function penanggungJawab(): BelongsTo
     {
         return $this->belongsTo(User::class, 'penanggung_jawab_id');
+    }
+
+    public function pemegangAset(): BelongsTo
+    {
+        return $this->belongsTo(AssetHolder::class, 'pemegang_aset_id');
     }
 
     public function kodeLokasi(): BelongsTo

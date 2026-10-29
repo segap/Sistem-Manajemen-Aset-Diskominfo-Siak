@@ -3,7 +3,6 @@
 @section('title', $config['title'].' - SIMIVA')
 
 @php
-    $canDelete = $canUpload;
     $formatBytes = function (?int $bytes): string {
         if (! $bytes) {
             return '-';
@@ -13,22 +12,22 @@
             ? number_format($bytes / 1048576, 1).' MB'
             : number_format($bytes / 1024, 0).' KB';
     };
+    $isMonthlyReport = ($config['table_by_month'] ?? false) === true;
+    $isSingleDocumentMonthly = $isMonthlyReport && (($config['single_document_per_period'] ?? false) === true);
+    $occupiedPeriods = $isSingleDocumentMonthly ? ($occupiedPeriodsByYear[$year] ?? []) : [];
+    $monthlyConflicts = $isSingleDocumentMonthly
+        ? collect($slots)->filter(fn ($slot) => $slot['documents']->count() > 1)
+        : collect();
+    $exportQuery = request()->except('page');
 @endphp
 
 @section('content')
 <main class="mx-auto w-full max-w-[1480px] px-[30px] pt-5 pb-[30px] max-[820px]:px-[18px] max-[820px]:py-4">
-    <div class="mb-6 flex items-end justify-between gap-6 max-[580px]:flex-col max-[580px]:items-stretch">
+    <div class="mb-6">
         <div>
             <h1 class="m-0 mb-[3px] text-[clamp(25px,2.5vw,34px)] font-extrabold tracking-[-.035em] text-[#0b2b50]">{{ $config['title'] }}</h1>
             <p class="m-0 text-[13px] text-[#66758a]">{{ $config['description'] }}</p>
         </div>
-        <form class="flex items-center gap-2" method="GET" action="{{ route('laporan-dokumen.index', $jenis) }}">
-            <select class="h-[34px] min-w-[96px] rounded-[8px] border border-[#dce4ee] bg-white px-2.5 text-[11px] font-semibold text-[#34445a] outline-0" name="tahun" onchange="this.form.submit()">
-                @foreach ($yearOptions as $option)
-                    <option value="{{ $option }}" @selected($year === $option)>{{ $option }}</option>
-                @endforeach
-            </select>
-        </form>
     </div>
 
     @if (session('success'))
@@ -47,14 +46,16 @@
         </div>
     @endunless
 
-    @if (($config['asset_holder_archive'] ?? false) === true)
-        @include('laporan-dokumen.partials.berita-acara-table')
-    @elseif (($config['type'] ?? null) === 'multi')
+    @if ($jenis === 'rkbmd' || ((($config['type'] ?? null) === 'multi') && (($config['asset_holder_archive'] ?? false) !== true)))
+        @php
+            $isRkbmd = ($config['rkbmd'] ?? false) === true;
+        @endphp
         <section class="overflow-hidden rounded-[14px] border border-slate-200 bg-white shadow-[0_8px_25px_rgb(31_62_91_/_4%)]">
+            @include('laporan-dokumen.partials.filter-toolbar')
             <div class="flex min-h-[72px] items-center justify-between gap-5 border-b border-[#edf1f5] px-[18px] py-3.5 max-[580px]:flex-col max-[580px]:items-stretch">
                 <div>
                     <strong class="block text-[12px] text-[#0b2b50]">Dokumen tahun {{ $year }}</strong>
-                    <small class="text-[10px] text-[#8290a3]">{{ $documents->count() ? $documents->count().' dokumen tersedia' : 'Dokumen belum tersedia' }}</small>
+                    <small class="text-[10px] text-[#8290a3]">{{ $documents->total() ? $documents->total().' dokumen tersedia' : 'Dokumen belum tersedia' }}</small>
                 </div>
                 @if ($canUpload && $schemaReady)
                     <button class="page-action-button inline-flex min-h-[38px] items-center justify-center rounded-[9px] border-0 bg-[#146bb5] px-3.5 text-[10px] font-bold text-white shadow-[0_8px_18px_rgb(20_107_181_/_16%)] transition hover:bg-[#0c568f]" type="button" data-modal-open="upload-report-document">+ Tambah Dokumen PDF</button>
@@ -66,27 +67,43 @@
                     <thead>
                         <tr>
                             <th class="number-column">No</th>
-                            <th>Judul</th>
-                            <th>File</th>
-                            <th>Upload</th>
+                            @if ($isRkbmd)
+                                <th>Tahun</th>
+                                <th>Jenis APBD</th>
+                                <th>Judul Dokumen</th>
+                                <th>Upload Terakhir</th>
+                            @else
+                                <th>Judul</th>
+                                <th>File</th>
+                                <th>Upload</th>
+                            @endif
                             <th class="action-column">Aksi</th>
                         </tr>
                     </thead>
                     <tbody>
                         @forelse ($documents as $index => $document)
                             <tr>
-                                <td class="number-column">{{ $index + 1 }}</td>
-                                <td><strong>{{ $document->judul ?: $config['title'] }}</strong><small class="cell-subtitle">Tahun {{ $document->tahun }}</small></td>
-                                <td><strong>{{ $document->nama_file_asli }}</strong><small class="cell-subtitle">{{ $formatBytes($document->ukuran_file) }}</small></td>
-                                <td>{{ $document->created_at?->translatedFormat('d M Y H:i') ?: '-' }}<small class="cell-subtitle">{{ $document->uploader?->name ?: '-' }}</small></td>
+                                <td class="number-column">{{ $documents->firstItem() + $index }}</td>
+                                @if ($isRkbmd)
+                                    <td><strong>{{ $document->tahun }}</strong></td>
+                                    <td><strong>{{ $config['period_labels'][$document->periode] ?? $document->periode }}</strong></td>
+                                    <td><strong>{{ $document->judul ?: $config['title'] }}</strong><small class="cell-subtitle">{{ $document->nama_file_asli }} · {{ $formatBytes($document->ukuran_file) }}</small></td>
+                                    <td>{{ $document->created_at?->translatedFormat('d M Y H:i') ?: '-' }}<small class="cell-subtitle">{{ $document->uploader?->name ?: '-' }}</small></td>
+                                @else
+                                    <td><strong>{{ $document->judul ?: $config['title'] }}</strong><small class="cell-subtitle">Tahun {{ $document->tahun }}</small></td>
+                                    <td><strong>{{ $document->nama_file_asli }}</strong><small class="cell-subtitle">{{ $formatBytes($document->ukuran_file) }}</small></td>
+                                    <td>{{ $document->created_at?->translatedFormat('d M Y H:i') ?: '-' }}<small class="cell-subtitle">{{ $document->uploader?->name ?: '-' }}</small></td>
+                                @endif
                                 <td class="action-column">
                                     <div class="row-actions">
                                         <button type="button" title="Lihat PDF" data-modal-open="preview-report-document-{{ $document->id }}" aria-label="Lihat {{ $document->judul ?: $document->nama_file_asli }}">
                                             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Zm10 3a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" /></svg>
                                         </button>
-                                        <a href="{{ route('laporan-dokumen.download', $document) }}" title="Unduh PDF" aria-label="Unduh {{ $document->judul ?: $document->nama_file_asli }}">
-                                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0 5-5m-5 5-5-5M5 21h14" /></svg>
-                                        </a>
+                                        @if (! $isRkbmd || $canDownload)
+                                            <a href="{{ route('laporan-dokumen.download', $document) }}" title="Unduh PDF" aria-label="Unduh {{ $document->judul ?: $document->nama_file_asli }}">
+                                                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0 5-5m-5 5-5-5M5 21h14" /></svg>
+                                            </a>
+                                        @endif
                                         @if ($canDelete)
                                             <button class="delete-action" type="button" title="Hapus Permanen" data-modal-open="delete-report-document-{{ $document->id }}" aria-label="Hapus {{ $document->judul ?: $document->nama_file_asli }}">
                                                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6m4-6v6M6 7l1 14h10l1-14M9 7V4h6v3" /></svg>
@@ -97,7 +114,7 @@
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="6">
+                                <td colspan="{{ $isRkbmd ? 6 : 5 }}">
                                     <div class="table-empty">
                                         <span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l4 4v14H6V3Zm9 0v5h4M9 13h6m-6 4h6" /></svg></span>
                                         <strong>Dokumen belum tersedia</strong>
@@ -109,19 +126,18 @@
                     </tbody>
                 </table>
             </div>
+            @include('laporan-dokumen.partials.pagination', ['paginator' => $documents, 'paginationRoute' => route('laporan-dokumen.index', $jenis)])
         </section>
-    @elseif (($config['table_by_month'] ?? false) === true)
-        @php
-            $isSingleDocumentMonthly = ($config['single_document_per_period'] ?? false) === true;
-            $occupiedPeriods = $isSingleDocumentMonthly ? ($occupiedPeriodsByYear[$year] ?? []) : [];
-            $monthlyConflicts = $isSingleDocumentMonthly ? collect($slots)->filter(fn ($slot) => $slot['documents']->count() > 1) : collect();
-        @endphp
+    @elseif (($config['asset_holder_archive'] ?? false) === true)
+        @include('laporan-dokumen.partials.berita-acara-table')
+    @elseif ($isMonthlyReport)
         @if ($monthlyConflicts->isNotEmpty())
             <div class="mb-4 rounded-[10px] border border-[#fed7aa] bg-[#fff7ed] px-[15px] py-[13px] text-[11px] text-[#9a3412]" role="alert">
                 Terdapat dokumen ganda pada {{ $monthlyConflicts->pluck('label')->join(', ') }} {{ $year }}. Tidak ada dokumen yang dipilih otomatis; tentukan dokumen yang akan dipertahankan sebelum PDF dapat dibuka langsung dari tabel.
             </div>
         @endif
         <section class="overflow-hidden rounded-[14px] border border-slate-200 bg-white shadow-[0_8px_25px_rgb(31_62_91_/_4%)]">
+            @include('laporan-dokumen.partials.filter-toolbar')
             <div class="flex min-h-[72px] items-center justify-between gap-5 border-b border-[#edf1f5] px-[18px] py-3.5 max-[580px]:flex-col max-[580px]:items-stretch">
                 <div>
                     <strong class="block text-[12px] text-[#0b2b50]">{{ $config['monthly_table_heading'] ?? 'Dokumen' }} {{ $year }}</strong>
@@ -144,14 +160,14 @@
                         </tr>
                     </thead>
                     <tbody>
-                        @forelse ($slots as $index => $slot)
+                        @forelse ($slotPagination as $index => $slot)
                             @php
                                 $slotDocuments = $slot['documents'];
                                 $latestDocument = $slotDocuments->sortByDesc('created_at')->first();
                                 $document = $slotDocuments->count() === 1 ? $slotDocuments->first() : null;
                             @endphp
                             <tr>
-                                <td class="number-column">{{ $index + 1 }}</td>
+                                <td class="number-column">{{ $slotPagination->firstItem() + $index }}</td>
                                 <td><strong>{{ $slot['label'] }} {{ $year }}</strong><small class="cell-subtitle">{{ $config['monthly_document_label'] ?? $config['title'] }}</small></td>
                                 @if ($isSingleDocumentMonthly)
                                     <td>
@@ -173,6 +189,10 @@
                                             </button>
                                             @if ($jenis === 'rekonsiliasi-bulanan')
                                                 <a href="{{ route('laporan-dokumen.download', $document) }}" title="Unduh PDF" aria-label="Unduh {{ $document->nama_file_asli }}">
+                                                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0 5-5m-5 5-5-5M5 21h14" /></svg>
+                                                </a>
+                                            @elseif ($jenis === 'persediaan-bulanan')
+                                                <a href="{{ route('laporan-dokumen.download', $document) }}" title="Download PDF" aria-label="Download {{ $document->nama_file_asli }}">
                                                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0 5-5m-5 5-5-5M5 21h14" /></svg>
                                                 </a>
                                             @endif
@@ -205,14 +225,16 @@
                     </tbody>
                 </table>
             </div>
+            @include('laporan-dokumen.partials.pagination', ['paginator' => $slotPagination, 'paginationRoute' => route('laporan-dokumen.index', $jenis)])
         </section>
     @elseif (in_array(($config['period'] ?? null), ['semester_1', 'tahunan', 'aset_unaudited', 'aset_audited', 'persediaan_semester_1', 'persediaan_tahunan'], true))
         @php $usesYearColumn = ! in_array(($config['period'] ?? null), ['semester_1', 'persediaan_semester_1'], true); @endphp
         <section class="overflow-hidden rounded-[14px] border border-slate-200 bg-white shadow-[0_8px_25px_rgb(31_62_91_/_4%)]">
+            @include('laporan-dokumen.partials.filter-toolbar')
             <div class="flex min-h-[72px] items-center justify-between gap-5 border-b border-[#edf1f5] px-[18px] py-3.5 max-[580px]:flex-col max-[580px]:items-stretch">
                 <div>
                     <strong class="block text-[12px] text-[#0b2b50]">Dokumen {{ $usesYearColumn ? $config['title'] : 'Semester 1' }} {{ $year }}</strong>
-                    <small class="text-[10px] text-[#8290a3]">{{ $documents->count() ? $documents->count().' dokumen tersedia' : 'Belum ada dokumen pada tahun ini' }}</small>
+                    <small class="text-[10px] text-[#8290a3]">{{ $documents->total() ? $documents->total().' dokumen tersedia' : 'Belum ada dokumen pada tahun ini' }}</small>
                 </div>
                 @if ($canUpload && $schemaReady)
                     <button class="page-action-button inline-flex min-h-[38px] items-center justify-center rounded-[9px] border-0 bg-[#146bb5] px-3.5 text-[10px] font-bold text-white shadow-[0_8px_18px_rgb(20_107_181_/_16%)] transition hover:bg-[#0c568f]" type="button" data-modal-open="upload-report-document-{{ $config['period'] }}">+ Tambah Dokumen PDF</button>
@@ -233,7 +255,7 @@
                     <tbody>
                         @forelse ($documents as $index => $document)
                             <tr>
-                                <td class="number-column">{{ $index + 1 }}</td>
+                                <td class="number-column">{{ $documents->firstItem() + $index }}</td>
                                 <td><strong>{{ $usesYearColumn ? $document->tahun : 'Semester 1 '.$document->tahun }}</strong><small class="cell-subtitle">{{ $config['title'] }}</small></td>
                                 <td><strong>{{ $document->nama_file_asli }}</strong><small class="cell-subtitle">{{ $formatBytes($document->ukuran_file) }}</small></td>
                                 <td>{{ $document->created_at?->translatedFormat('d M Y H:i') ?: '-' }}<small class="cell-subtitle">{{ $document->uploader?->name ?: '-' }}</small></td>
@@ -267,6 +289,7 @@
                     </tbody>
                 </table>
             </div>
+            @include('laporan-dokumen.partials.pagination', ['paginator' => $documents, 'paginationRoute' => route('laporan-dokumen.index', $jenis)])
         </section>
     @else
         <section class="grid grid-cols-[repeat(auto-fit,minmax(280px,1fr))] gap-4">
@@ -316,8 +339,8 @@
         @if (($config['asset_holder_archive'] ?? false) === true)
             @include('laporan-dokumen.partials.berita-acara-modal', ['modalId' => 'upload-berita-acara', 'document' => null])
         @elseif (($config['type'] ?? null) === 'multi')
-            @include('laporan-dokumen.partials.upload-modal', ['modalId' => 'upload-report-document', 'period' => $config['period'], 'periodLabel' => $config['title'], 'needsTitle' => true])
-        @elseif (($config['table_by_month'] ?? false) === true)
+            @include('laporan-dokumen.partials.upload-modal', ['modalId' => 'upload-report-document', 'period' => $config['period'] ?? null, 'periodLabel' => $config['title'], 'needsTitle' => true, 'selectableRkbmdPeriod' => ($config['rkbmd'] ?? false) === true, 'periodLabels' => $config['period_labels'] ?? []])
+        @elseif ($isMonthlyReport)
             @include('laporan-dokumen.partials.upload-modal', ['modalId' => 'upload-report-document', 'period' => null, 'periodLabel' => 'Pilih tahun dan bulan dokumen', 'needsTitle' => true, 'selectablePeriod' => true, 'occupiedPeriods' => $occupiedPeriods ?? [], 'occupiedPeriodsByYear' => $occupiedPeriodsByYear ?? []])
         @else
             @foreach ($slots as $slot)
@@ -326,7 +349,7 @@
         @endif
     @endif
 
-    @if (($config['table_by_month'] ?? false) === true && ! (($config['single_document_per_period'] ?? false) === true))
+    @if ($isMonthlyReport && ! $isSingleDocumentMonthly)
         @foreach ($slots as $slot)
             @php
                 $slotDocuments = $slot['documents'];

@@ -1,5 +1,9 @@
 @php
-    $canManage = in_array(auth()->user()?->role, ['admin', 'super_admin'], true);
+    $canCreate = auth()->user()?->hasPermission('kodefikasi.create') ?? false;
+    $canUpdate = auth()->user()?->hasPermission('kodefikasi.update') ?? false;
+    $canDelete = auth()->user()?->hasPermission('kodefikasi.delete') ?? false;
+    $canImport = auth()->user()?->hasPermission('kodefikasi.import') ?? false;
+    $canExport = auth()->user()?->hasPermission('kodefikasi.export') ?? false;
     $tabs = [
         'kode-barang' => ['label' => 'Kode Barang', 'type' => 'kode-barang', 'items' => $kodeBarang, 'code' => 'kode_barang', 'name' => 'nama_barang', 'options' => $kodeBarangOptions],
         'kode-persediaan' => ['label' => 'Kode Persediaan', 'type' => 'kode-persediaan', 'items' => $kodePersediaan, 'code' => 'kode_persediaan', 'name' => 'nama_barang', 'options' => $kodePersediaanOptions],
@@ -44,13 +48,19 @@
                     <input class="h-[42px] min-w-[260px] flex-1 rounded-[9px] border border-[#dce4ec] bg-[#fbfcfe] px-3 text-[10px] outline-0 focus:border-[#6ca9d3] focus:shadow-[0_0_0_3px_rgb(20_107_181_/_8%)]" name="search" value="{{ request('search') }}" placeholder="Cari kode atau nama...">
                     <button class="page-action-button inline-flex min-h-[38px] items-center justify-center rounded-[9px] border-0 bg-[#146bb5] px-3.5 text-[10px] font-bold text-white shadow-[0_8px_18px_rgb(20_107_181_/_16%)] transition hover:bg-[#0c568f]" type="submit">Cari</button>
                     <a class="page-action-button inline-flex min-h-[38px] items-center justify-center rounded-[9px] border border-[#dbe3eb] bg-white px-3.5 text-[10px] font-bold text-[#5e7084] no-underline transition hover:border-[#b8c6d6] hover:bg-[#f8fafc]" href="{{ route('kodefikasi.index', ['tab' => $activeTab]) }}">Reset</a>
-                    <x-export-dropdown :dataset="$activeTab === 'kode-persediaan' ? 'kodefikasi-persediaan' : ($activeTab === 'kode-lokasi' ? 'kodefikasi-lokasi' : 'kodefikasi-barang')" />
+                    @if ($canExport)
+                        <x-export-dropdown :dataset="$activeTab === 'kode-persediaan' ? 'kodefikasi-persediaan' : ($activeTab === 'kode-lokasi' ? 'kodefikasi-lokasi' : 'kodefikasi-barang')" />
+                    @endif
                 </form>
 
-                @if ($canManage)
+                @if ($canImport || $canCreate)
                     <div class="flex flex-wrap gap-2 max-[760px]:w-full">
-                        <button class="page-action-button import-excel-button inline-flex min-h-[38px] items-center justify-center rounded-[9px] border-0 px-3.5 text-[10px] font-bold text-white transition" type="button" data-modal-open="import-{{ $activeTab }}">Import Excel</button>
-                        <button class="page-action-button inline-flex min-h-[38px] items-center justify-center gap-2 rounded-[9px] border-0 bg-[#146bb5] px-3.5 text-[10px] font-bold text-white shadow-[0_8px_18px_rgb(20_107_181_/_16%)] transition hover:bg-[#0c568f]" type="button" data-modal-open="create-{{ $activeTab }}"><span class="button-plus">+</span> Tambah</button>
+                        @if ($canImport)
+                            <button class="page-action-button import-excel-button inline-flex min-h-[38px] items-center justify-center rounded-[9px] border-0 px-3.5 text-[10px] font-bold text-white transition" type="button" data-modal-open="import-{{ $activeTab }}">Import Excel</button>
+                        @endif
+                        @if ($canCreate)
+                            <button class="page-action-button inline-flex min-h-[38px] items-center justify-center gap-2 rounded-[9px] border-0 bg-[#146bb5] px-3.5 text-[10px] font-bold text-white shadow-[0_8px_18px_rgb(20_107_181_/_16%)] transition hover:bg-[#0c568f]" type="button" data-modal-open="create-{{ $activeTab }}"><span class="button-plus">+</span> Tambah</button>
+                        @endif
                     </div>
                 @endif
             </div>
@@ -80,8 +90,10 @@
                                 <td class="action-column">
                                     <div class="row-actions">
                                         <button type="button" data-modal-open="detail-{{ $activeTab }}-{{ $item->id }}" title="Detail" aria-label="Detail {{ $item->{$config['name']} }}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z" /><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" /></svg></button>
-                                        @if ($canManage)
+                                        @if ($canUpdate)
                                             <button type="button" data-modal-open="edit-{{ $activeTab }}-{{ $item->id }}" title="Edit" aria-label="Edit {{ $item->{$config['name']} }}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4L16.5 3.5Z" /></svg></button>
+                                        @endif
+                                        @if ($canDelete)
                                             <button class="danger" type="button" data-modal-open="delete-{{ $activeTab }}-{{ $item->id }}" title="Hapus" aria-label="Hapus {{ $item->{$config['name']} }}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M9 7l1-3h4l1 3m3 0-1 14H7L6 7" /></svg></button>
                                         @endif
                                     </div>
@@ -122,6 +134,6 @@
             </div>
     </section>
 
-    @include('kodefikasi.partials.modals', ['config' => $config, 'items' => $items, 'activeTab' => $activeTab, 'canManage' => $canManage])
+    @include('kodefikasi.partials.modals', compact('config', 'items', 'activeTab', 'canCreate', 'canUpdate', 'canDelete', 'canImport'))
 </main>
 @endsection

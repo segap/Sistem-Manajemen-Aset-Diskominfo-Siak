@@ -36,7 +36,7 @@ class KirController extends Controller
         $search = trim((string) $request->query('search', ''));
 
         $ruangan = Ruangan::query()
-            ->with(['penanggungJawab', 'kir'])
+            ->with(['penanggungJawab', 'pemegangAset', 'kir'])
             ->withCount('kirDetails')
             ->when($search !== '', function ($query) use ($search): void {
                 $query->where(function ($inner) use ($search): void {
@@ -45,7 +45,10 @@ class KirController extends Controller
                         ->orWhereHas('penanggungJawab', function ($user) use ($search): void {
                             $user->where('name', 'like', "%{$search}%")
                                 ->orWhere('email', 'like', "%{$search}%");
-                        });
+                        })
+                        ->orWhereHas('pemegangAset', fn ($holder) => $holder
+                            ->where('nama_pegawai', 'like', "%{$search}%")
+                            ->orWhere('email', 'like', "%{$search}%"));
                 });
             })
             ->orderBy('nama_ruangan')
@@ -107,8 +110,8 @@ class KirController extends Controller
 
     public function store(KirDetailRequest $request, Ruangan $ruangan): RedirectResponse
     {
+        $validated = $this->validatedPayload($request);
         $kir = $this->ensureKir($ruangan);
-        $validated = $this->validatedPayload($request, $kir);
         $this->ensureUniqueNibar($kir, $validated['nibar'] ?? null);
 
         $kir->details()->create($validated);
@@ -118,10 +121,11 @@ class KirController extends Controller
 
     public function update(KirDetailRequest $request, Ruangan $ruangan, DetailKir $detailKir): RedirectResponse
     {
-        $kir = $this->ensureKir($ruangan);
+        $kir = $ruangan->kir()->firstOrFail();
         $this->abortIfWrongKir($kir, $detailKir);
 
-        $validated = $this->validatedPayload($request, $kir);
+        $validated = $this->validatedPayload($request);
+        $kir = $this->ensureKir($ruangan);
         $this->ensureUniqueNibar($kir, $validated['nibar'] ?? null, $detailKir);
 
         $detailKir->update($validated);
@@ -155,7 +159,6 @@ class KirController extends Controller
 
     public function template(Ruangan $ruangan): StreamedResponse
     {
-        $kir = $this->ensureKir($ruangan);
         $spreadsheet = new Spreadsheet();
         $sheet = $spreadsheet->getActiveSheet();
         $sheet->setTitle('Template KIR');
@@ -257,7 +260,7 @@ class KirController extends Controller
     }
 
     /** @return array<string, mixed> */
-    private function validatedPayload(KirDetailRequest $request, Kir $kir): array
+    private function validatedPayload(KirDetailRequest $request): array
     {
         $validated = $request->validated();
         $validated['kode_lokasi'] = filled($validated['kode_lokasi'] ?? null) ? trim((string) $validated['kode_lokasi']) : null;
@@ -325,11 +328,16 @@ class KirController extends Controller
     /** @return array<string, mixed> */
     private function exportData(Ruangan $ruangan): array
     {
-        $kir = $this->ensureKir($ruangan);
-        $this->syncKirDetails($kir);
+        $kir = $ruangan->kir()->first();
+
+        abort_if(
+            ! $kir,
+            Response::HTTP_NOT_FOUND,
+            'Data KIR untuk ruangan ini belum tersedia. Lakukan sinkronisasi KIR secara manual terlebih dahulu.'
+        );
 
         return [
-            'ruangan' => $ruangan->loadMissing('penanggungJawab'),
+            'ruangan' => $ruangan->loadMissing(['penanggungJawab', 'pemegangAset']),
             'kir' => $kir,
             'details' => $kir->details()->orderBy('nama_barang')->get(),
             'generatedAt' => now(),

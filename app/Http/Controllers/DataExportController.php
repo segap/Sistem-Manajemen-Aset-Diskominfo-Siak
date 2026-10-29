@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Services\DataExportService;
+use App\Support\CategoryAssetExportPermissions;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -24,7 +25,9 @@ class DataExportController extends Controller
     public function __invoke(Request $request, DataExportService $service, string $dataset, string $format): Response
     {
         abort_unless(in_array($format, ['word', 'pdf', 'excel'], true), 404);
-        $permission = self::DATASET_PERMISSIONS[$dataset] ?? null;
+        $permission = $dataset === 'kategori-aset'
+            ? CategoryAssetExportPermissions::permissionForFormat($format)
+            : self::DATASET_PERMISSIONS[$dataset] ?? null;
         abort_unless($permission && $request->user()?->hasPermission($permission), 403, 'Anda tidak memiliki hak akses untuk ekspor ini.');
 
         if (in_array($dataset, ['users', 'roles'], true)) {

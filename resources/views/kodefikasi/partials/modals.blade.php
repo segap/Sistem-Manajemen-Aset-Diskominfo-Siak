@@ -6,9 +6,11 @@
     $closeIcon = '<svg class="h-[18px] w-[18px] fill-none stroke-current stroke-[2.4] [stroke-linecap:round]" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>';
 @endphp
 
-@if ($canManage)
+@if ($canCreate)
     @include('kodefikasi.partials.form-modal', ['modalId' => 'create-'.$activeTab, 'title' => 'Tambah '.$config['label'], 'action' => route('kodefikasi.store', $type), 'method' => 'POST', 'item' => null, 'config' => $config, 'options' => $options])
+@endif
 
+@if ($canImport)
     <div class="fixed inset-0 z-80 hidden place-items-center overflow-y-auto bg-[rgb(5_22_38_/_48%)] p-6 animate-[modalBackdropIn_.2s_ease-out_both] max-[580px]:p-3" data-modal="import-{{ $activeTab }}">
         <section class="w-[min(680px,100%)] rounded-2xl bg-white shadow-[0_25px_80px_rgb(2_19_34_/_28%)] animate-[modalZoomIn_.24s_cubic-bezier(.2,.8,.2,1)_both]">
             <header class="flex min-h-[83px] items-center justify-between border-b border-[#edf1f5] px-[22px] py-[17px]">
@@ -65,8 +67,10 @@
         </section>
     </div>
 
-    @if ($canManage)
+    @if ($canUpdate)
         @include('kodefikasi.partials.form-modal', ['modalId' => 'edit-'.$activeTab.'-'.$item->id, 'title' => 'Edit '.$config['label'], 'action' => route('kodefikasi.update', [$type, $item->id]), 'method' => 'PUT', 'item' => $item, 'config' => $config, 'options' => $options])
+    @endif
+    @if ($canDelete)
         <div class="fixed inset-0 z-80 hidden place-items-center bg-[rgb(5_22_38_/_48%)] p-6 animate-[modalBackdropIn_.2s_ease-out_both] max-[580px]:p-3" data-modal="delete-{{ $activeTab }}-{{ $item->id }}">
             <section class="w-[min(430px,100%)] rounded-2xl bg-white p-[27px] text-center shadow-[0_25px_80px_rgb(2_19_34_/_28%)] animate-[modalZoomIn_.24s_cubic-bezier(.2,.8,.2,1)_both]">
                 <div class="mx-auto mb-4 grid h-12 w-12 place-items-center rounded-full bg-red-50 text-red-600">

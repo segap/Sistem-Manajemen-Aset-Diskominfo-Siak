@@ -269,6 +269,103 @@ document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('[data-permission-form]').forEach((panel) => {
     const checkboxes = Array.from(panel.querySelectorAll('[data-permission-checkbox]'))
     const selectedCount = panel.querySelector('[data-permission-selected-count]')
+    const actionGroups = [
+      {
+        viewCheckbox: panel.querySelector('[data-asset-view-checkbox]'),
+        options: panel.querySelector('[data-asset-action-options]'),
+        checkboxes: Array.from(panel.querySelectorAll('[data-asset-action-checkbox]')),
+        toggle: panel.querySelector('[data-asset-actions-toggle]'),
+      },
+      {
+        viewCheckbox: panel.querySelector('[data-category-asset-view-checkbox]'),
+        options: panel.querySelector('[data-category-asset-action-options]'),
+        checkboxes: Array.from(panel.querySelectorAll('[data-category-asset-action-checkbox]')),
+        toggle: panel.querySelector('[data-category-asset-actions-toggle]'),
+      },
+      {
+        viewCheckbox: panel.querySelector('[data-kodefikasi-view-checkbox]'),
+        options: panel.querySelector('[data-kodefikasi-action-options]'),
+        checkboxes: Array.from(panel.querySelectorAll('[data-kodefikasi-action-checkbox]')),
+        toggle: panel.querySelector('[data-kodefikasi-actions-toggle]'),
+      },
+      {
+        viewCheckbox: panel.querySelector('[data-kodefikasi-internal-view-checkbox]'),
+        options: panel.querySelector('[data-kodefikasi-internal-action-options]'),
+        checkboxes: Array.from(panel.querySelectorAll('[data-kodefikasi-internal-action-checkbox]')),
+        toggle: panel.querySelector('[data-kodefikasi-internal-actions-toggle]'),
+      },
+      {
+        viewCheckbox: panel.querySelector('[data-ruangan-view-checkbox]'),
+        options: panel.querySelector('[data-ruangan-action-options]'),
+        checkboxes: Array.from(panel.querySelectorAll('[data-ruangan-action-checkbox]')),
+        toggle: panel.querySelector('[data-ruangan-actions-toggle]'),
+      },
+      {
+        viewCheckbox: panel.querySelector('[data-kir-view-checkbox]'),
+        options: panel.querySelector('[data-kir-action-options]'),
+        checkboxes: Array.from(panel.querySelectorAll('[data-kir-action-checkbox]')),
+        toggle: panel.querySelector('[data-kir-actions-toggle]'),
+      },
+      {
+        viewCheckbox: panel.querySelector('[data-stock-opname-view-checkbox]'),
+        options: panel.querySelector('[data-stock-opname-action-options]'),
+        checkboxes: Array.from(panel.querySelectorAll('[data-stock-opname-action-checkbox]')),
+        toggle: panel.querySelector('[data-stock-opname-actions-toggle]'),
+      },
+      {
+        viewCheckbox: panel.querySelector('[data-stock-opname-category-view-checkbox]'),
+        options: panel.querySelector('[data-stock-opname-category-action-options]'),
+        checkboxes: Array.from(panel.querySelectorAll('[data-stock-opname-category-action-checkbox]')),
+        toggle: panel.querySelector('[data-stock-opname-category-actions-toggle]'),
+      },
+      {
+        viewCheckbox: panel.querySelector('[data-supply-request-view-checkbox]'),
+        options: panel.querySelector('[data-supply-request-action-options]'),
+        checkboxes: Array.from(panel.querySelectorAll('[data-supply-request-action-checkbox]')),
+        toggle: panel.querySelector('[data-supply-request-actions-toggle]'),
+      },
+      {
+        viewCheckbox: panel.querySelector('[data-loan-view-checkbox]'),
+        options: panel.querySelector('[data-loan-action-options]'),
+        checkboxes: Array.from(panel.querySelectorAll('[data-loan-action-checkbox]')),
+        toggle: panel.querySelector('[data-loan-actions-toggle]'),
+      },
+      {
+        viewCheckbox: panel.querySelector('[data-maintenance-view-checkbox]'),
+        options: panel.querySelector('[data-maintenance-action-options]'),
+        checkboxes: Array.from(panel.querySelectorAll('[data-maintenance-action-checkbox]')),
+        toggle: panel.querySelector('[data-maintenance-actions-toggle]'),
+      },
+      {
+        viewCheckbox: panel.querySelector('[data-procurement-proposal-view-checkbox]'),
+        options: panel.querySelector('[data-procurement-proposal-action-options]'),
+        checkboxes: Array.from(panel.querySelectorAll('[data-procurement-proposal-action-checkbox]')),
+        toggle: panel.querySelector('[data-procurement-proposal-actions-toggle]'),
+      },
+      {
+        viewCheckbox: panel.querySelector('[data-procurement-view-checkbox]'),
+        options: panel.querySelector('[data-procurement-action-options]'),
+        checkboxes: Array.from(panel.querySelectorAll('[data-procurement-action-checkbox]')),
+        toggle: panel.querySelector('[data-procurement-actions-toggle]'),
+      },
+      {
+        viewCheckbox: panel.querySelector('[data-disposal-view-checkbox]'),
+        options: panel.querySelector('[data-disposal-action-options]'),
+        checkboxes: Array.from(panel.querySelectorAll('[data-disposal-action-checkbox]')),
+        toggle: panel.querySelector('[data-disposal-actions-toggle]'),
+      },
+    ]
+    const reportActionGroups = Array.from(panel.querySelectorAll('[data-report-view-checkbox]')).map((viewCheckbox) => {
+      const reportView = viewCheckbox.dataset.reportViewCheckbox
+
+      return {
+        viewCheckbox,
+        options: panel.querySelector(`[data-report-action-options="${reportView}"]`),
+        checkboxes: Array.from(panel.querySelectorAll(`[data-report-action-checkbox="${reportView}"]`)),
+        toggle: panel.querySelector(`[data-report-actions-toggle="${reportView}"]`),
+      }
+    })
+    const allActionGroups = [...actionGroups, ...reportActionGroups]
 
     const refresh = () => {
       if (selectedCount) selectedCount.textContent = String(checkboxes.filter((checkbox) => checkbox.checked).length)
@@ -280,10 +377,30 @@ document.addEventListener('DOMContentLoaded', () => {
 
     panel.querySelector('[data-permission-clear]')?.addEventListener('click', () => {
       checkboxes.forEach((checkbox) => { checkbox.checked = false })
+      allActionGroups.forEach((group) => group.checkboxes.forEach((checkbox) => { checkbox.checked = false }))
       refresh()
+      refreshActionGroups()
+    })
+
+    const refreshActionGroups = () => {
+      allActionGroups.forEach((group) => {
+        const enabled = Boolean(group.viewCheckbox?.checked)
+        group.checkboxes.forEach((checkbox) => {
+          checkbox.disabled = !enabled
+          if (!enabled) checkbox.checked = false
+        })
+      })
+    }
+
+    allActionGroups.forEach((group) => {
+      group.viewCheckbox?.addEventListener('change', refreshActionGroups)
+      group.toggle?.addEventListener('click', () => {
+        group.options?.classList.toggle('hidden')
+      })
     })
 
     refresh()
+    refreshActionGroups()
   })
 
   document.querySelectorAll('[data-condition-document-form]').forEach((form) => {

@@ -4,12 +4,14 @@ namespace App\Http\Controllers;
 
 use App\Enums\RuanganStatus;
 use App\Http\Requests\RuanganRequest;
+use App\Models\AssetHolder;
 use App\Models\Ruangan;
 use App\Models\KodeLokasi;
-use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
 class RuanganController extends Controller
@@ -20,7 +22,7 @@ class RuanganController extends Controller
         $status = RuanganStatus::tryFrom($request->string('status')->toString());
 
         $ruangan = Ruangan::query()
-            ->with('penanggungJawab')
+            ->with(['penanggungJawab', 'pemegangAset'])
             ->when($request->filled('search'), function (Builder $query) use ($request): void {
                 $search = $request->string('search')->toString();
                 $query->where(function (Builder $query) use ($search): void {
@@ -28,6 +30,9 @@ class RuanganController extends Controller
                         ->orWhere('nama_ruangan', 'like', "%{$search}%")
                         ->orWhereHas('penanggungJawab', fn (Builder $query) => $query
                             ->where('name', 'like', "%{$search}%")
+                            ->orWhere('email', 'like', "%{$search}%"))
+                        ->orWhereHas('pemegangAset', fn (Builder $query) => $query
+                            ->where('nama_pegawai', 'like', "%{$search}%")
                             ->orWhere('email', 'like', "%{$search}%"));
                 });
             })
@@ -38,7 +43,10 @@ class RuanganController extends Controller
 
         return view('ruangan.index', [
             'ruangan' => $ruangan,
-            'users' => User::query()->where('is_active', true)->orderBy('name')->get(['id', 'name', 'email', 'nip']),
+            'assetHolders' => AssetHolder::query()
+                ->where('is_active', true)
+                ->orderBy('nama_pegawai')
+                ->get(['id', 'nama_pegawai', 'unit_kerja']),
             'kodeLokasiOptions' => KodeLokasi::query()->orderBy('kode_lokasi')->limit(500)->get(['id', 'kode_lokasi', 'nama_lokasi']),
             'statuses' => RuanganStatus::cases(),
         ]);
@@ -62,7 +70,17 @@ class RuanganController extends Controller
 
     public function destroy(Request $request, Ruangan $ruangan): RedirectResponse
     {
-        $ruangan->delete();
+        DB::transaction(function () use ($ruangan): void {
+            $lockedRuangan = Ruangan::query()->whereKey($ruangan->id)->lockForUpdate()->firstOrFail();
+
+            if ($lockedRuangan->kir()->exists()) {
+                throw ValidationException::withMessages([
+                    'ruangan' => 'Ruangan tidak dapat dihapus karena sudah digunakan pada Kartu Inventaris Ruangan (KIR). Silakan ubah status ruangan menjadi Nonaktif jika tidak digunakan lagi.',
+                ]);
+            }
+
+            $lockedRuangan->delete();
+        });
 
         return redirect()
             ->route('ruangan.index', $request->only('search', 'status', 'per_page', 'page'))

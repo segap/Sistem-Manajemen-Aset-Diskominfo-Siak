@@ -15,6 +15,7 @@
     ];
     $selectedAssetHolderId = old('pemegang_aset_id', $asset?->pemegang_aset_id);
     $selectedAssetHolder = $asset?->assetHolder;
+    $canUpdateAssetCondition = auth()->user()?->hasPermission('aset.condition.update') ?? false;
     $assetHolderOptionsForForm = collect($assetHolderOptions ?? collect());
     if ($isEdit && $selectedAssetHolder && ! $selectedAssetHolder->is_active) {
         $assetHolderOptionsForForm = $assetHolderOptionsForForm->prepend($selectedAssetHolder)->unique('id');
@@ -128,7 +129,10 @@
                             Lihat Panduan Klasifikasi
                         </button>
                     </div>
-                    <select class="h-[42px] w-full rounded-[9px] border border-[#dce4ec] bg-white px-3 text-[10px] font-normal text-[#34465a] outline-0 transition focus:border-[#6fa9cf] focus:shadow-[0_0_0_3px_rgb(20_107_181_/_8%)]" name="kondisi" required data-condition-guide-select>
+                    @if ($isEdit && ! $canUpdateAssetCondition)
+                        <input type="hidden" name="kondisi" value="{{ old('kondisi', $asset?->kondisi?->value ?? 'baik') }}">
+                    @endif
+                    <select class="h-[42px] w-full rounded-[9px] border border-[#dce4ec] bg-white px-3 text-[10px] font-normal text-[#34465a] outline-0 transition focus:border-[#6fa9cf] focus:shadow-[0_0_0_3px_rgb(20_107_181_/_8%)] disabled:cursor-not-allowed disabled:bg-[#f3f6f9]" name="kondisi" required data-condition-guide-select @disabled($isEdit && ! $canUpdateAssetCondition)>
                         @foreach ($conditions as $value => $label)
                             <option value="{{ $value }}" @selected(old('kondisi', $asset?->kondisi?->value ?? 'baik') === $value)>{{ $conditionDropdownLabels[$value] ?? $label }}</option>
                         @endforeach

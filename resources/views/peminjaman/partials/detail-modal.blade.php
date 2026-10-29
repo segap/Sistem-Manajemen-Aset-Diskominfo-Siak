@@ -11,12 +11,13 @@
     $approval = app(\App\Services\RiwayatPersetujuanService::class)->statusSummary('loan', $loan);
     $timelineItem = ['approval' => $approval];
     $currentRole = auth()->user()?->role instanceof UserRole ? auth()->user()->role->value : auth()->user()?->role;
-    $canDecideLoan = $canApproveLoan && (
-        ($currentRole === UserRole::TimAset->value && $loan->status === LoanStatus::Submitted)
-        || ($currentRole === UserRole::KasubbagUmumPerencanaan->value && $loan->status === LoanStatus::VerifiedByAssetTeam)
-    );
-    $approveValue = $currentRole === UserRole::TimAset->value ? LoanStatus::VerifiedByAssetTeam->value : LoanStatus::Approved->value;
-    $approveLabel = $currentRole === UserRole::TimAset->value ? 'Verifikasi Tim Aset' : 'Setujui Kasubbag';
+    $canVerifyThisLoan = ($canVerifyLoan ?? false) && $loan->status === LoanStatus::Submitted;
+    $canApproveThisLoan = $canApproveLoan
+        && $currentRole === UserRole::KasubbagUmumPerencanaan->value
+        && $loan->status === LoanStatus::VerifiedByAssetTeam;
+    $canDecideLoan = $canVerifyThisLoan || $canApproveThisLoan;
+    $approveValue = $canVerifyThisLoan ? LoanStatus::VerifiedByAssetTeam->value : LoanStatus::Approved->value;
+    $approveLabel = $canVerifyThisLoan ? 'Verifikasi Tim Aset' : 'Setujui Kasubbag';
     $loanDetails = $loan->details->isNotEmpty() ? $loan->details : collect([(object) ['id' => 'legacy-'.$loan->id, 'asset' => $loan->asset, 'kondisi_kembali' => $loan->kondisi_kembali, 'catatan_pengembalian' => $loan->catatan_pengembalian]]);
 @endphp
 
@@ -136,7 +137,7 @@
                         <button class="page-action-button inline-flex min-h-[38px] items-center justify-center rounded-[9px] border-0 bg-[#146bb5] px-3.5 text-[10px] font-bold text-white shadow-[0_8px_18px_rgb(20_107_181_/_16%)] transition hover:bg-[#0c568f]" type="submit" name="decision" value="{{ $approveValue }}">{{ $approveLabel }}</button>
                     </div>
                 </form>
-            @elseif ($canApproveLoan)
+            @elseif (($canVerifyLoan ?? false) || $canApproveLoan)
                 <div class="rounded-[12px] border border-[#d8e8fb] bg-[#f3f8ff] p-4 text-[11px] font-semibold leading-relaxed text-[#2d638f]">
                     Pengajuan ini sudah berstatus {{ $approval['label'] }}. Tombol Setujui/Tolak hanya muncul saat pengajuan menunggu keputusan role Anda.
                 </div>

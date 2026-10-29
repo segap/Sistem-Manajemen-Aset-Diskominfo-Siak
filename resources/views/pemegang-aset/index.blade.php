@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'Pemegang Aset - SIMIVA')
+@section('title', 'Data Pegawai - SIMIVA')
 
 @php
     use App\Enums\WorkUnit;
@@ -15,14 +15,14 @@
 <main class="mx-auto w-full max-w-[1480px] px-[30px] pt-5 pb-[30px] max-[820px]:px-[18px] max-[820px]:py-4">
     <div class="mb-6 flex items-end justify-between gap-6 max-[580px]:flex-col max-[580px]:items-stretch">
         <div>
-            <h1 class="m-0 mb-[3px] text-[clamp(25px,2.5vw,34px)] font-extrabold tracking-[-.035em] text-[#0b2b50]">Pemegang Aset</h1>
+            <h1 class="m-0 mb-[3px] text-[clamp(25px,2.5vw,34px)] font-extrabold tracking-[-.035em] text-[#0b2b50]">Data Pegawai</h1>
             <p class="m-0 text-[13px] text-[#66758a]">Kelola data pegawai dan penanggung jawab aset Dinas Komunikasi dan Informatika Kabupaten Siak.</p>
         </div>
         @if ($canManageAssetHolders)
             <div class="flex gap-2 max-[580px]:grid max-[580px]:w-full">
                 <button class="page-action-button import-excel-button inline-flex min-h-[38px] items-center justify-center rounded-[9px] border-0 px-3.5 text-[10px] font-bold text-white transition" type="button" data-modal-open="import-asset-holder">Import Excel</button>
                 <button class="page-action-button inline-flex min-h-[38px] items-center justify-center gap-2 rounded-[9px] border-0 bg-[#146bb5] px-3.5 text-[10px] font-bold text-white shadow-[0_8px_18px_rgb(20_107_181_/_16%)] transition hover:bg-[#0c568f]" type="button" data-modal-open="create-asset-holder">
-                    <span class="text-sm font-normal leading-none">+</span> Tambah Pemegang Aset
+                    <span class="text-sm font-normal leading-none">+</span> Tambah Pegawai
                 </button>
             </div>
         @endif
@@ -54,11 +54,6 @@
                     <option value="{{ $unitValue }}" @selected(request('unit_kerja') === $unitValue)>{{ $unitLabel }}</option>
                 @endforeach
             </select>
-            <select class="h-[42px] min-w-[160px] rounded-[9px] border border-[#dce4ee] bg-white px-3 text-[10px] font-semibold text-[#34445a] outline-0" name="is_active" onchange="this.form.submit()">
-                <option value="">Semua status</option>
-                <option value="1" @selected(request('is_active') === '1')>Aktif</option>
-                <option value="0" @selected(request('is_active') === '0')>Nonaktif</option>
-            </select>
             <button class="page-action-button inline-flex min-h-[38px] items-center justify-center rounded-[9px] border-0 bg-[#146bb5] px-3.5 text-[10px] font-bold text-white shadow-[0_8px_18px_rgb(20_107_181_/_16%)] transition hover:bg-[#0c568f]" type="submit">Cari</button>
             <a class="page-action-button inline-flex min-h-[38px] items-center justify-center rounded-[9px] border border-[#dbe3eb] bg-white px-3.5 text-[10px] font-bold text-[#5e7084] no-underline transition hover:border-[#b8c6d6] hover:bg-[#f8fafc]" href="{{ route('pemegang-aset.index') }}">Reset</a>
         </form>
@@ -75,8 +70,8 @@
                         <th>Jabatan</th>
                         <th>Email</th>
                         <th>No. HP</th>
+                        <th class="min-w-[190px]">Alamat</th>
                         <th class="status-column">Jumlah Aset</th>
-                        <th class="status-column">Status</th>
                         <th class="action-column">Aksi</th>
                     </tr>
                 </thead>
@@ -102,8 +97,8 @@
                             <td>{{ $holder->jabatan }}</td>
                             <td>{{ $holder->email ?: '-' }}</td>
                             <td>{{ $holder->nomor_hp ?: '-' }}</td>
+                            <td class="min-w-[190px]">{{ $holder->alamat ?: '-' }}</td>
                             <td class="status-column"><span class="loan-status status-diajukan">{{ $hasAssetHolderColumn ? ($holder->assets_count ?? 0) : 0 }}</span></td>
-                            <td class="status-column"><span class="loan-status {{ $holder->is_active ? 'status-approved' : 'status-rejected' }}">{{ $holder->is_active ? 'Aktif' : 'Nonaktif' }}</span></td>
                             <td class="action-column">
                                 <div class="row-actions">
                                     <button title="Detail" type="button" data-modal-open="detail-asset-holder-{{ $holder->id }}" aria-label="Detail {{ $holder->nama_pegawai }}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Zm10 3a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" /></svg></button>
@@ -119,7 +114,7 @@
                             <td colspan="11">
                                 <div class="table-empty">
                                     <span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2m7-10a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm13 10v-2a4 4 0 0 0-3-3.87m-1-11.96a4 4 0 0 1 0 7.75" /></svg></span>
-                                    <strong>Pemegang aset tidak ditemukan</strong>
+                                    <strong>Data pegawai tidak ditemukan</strong>
                                     <p>Ubah filter atau pencarian untuk melihat data lainnya.</p>
                                 </div>
                             </td>
@@ -163,7 +158,7 @@
             @php $deleteOpen = $openModal === 'delete-'.$holder->id; @endphp
             <div class="fixed inset-0 z-80 {{ $deleteOpen ? 'grid' : 'hidden' }} place-items-center overflow-y-auto bg-[rgb(5_22_38_/_48%)] p-6 animate-[modalBackdropIn_.2s_ease-out_both] max-[580px]:p-3" data-modal="delete-asset-holder-{{ $holder->id }}" role="presentation">
                 <section class="w-[min(460px,100%)] rounded-2xl bg-white p-[27px] text-center shadow-[0_25px_80px_rgb(2_19_34_/_28%)] animate-[modalZoomIn_.24s_cubic-bezier(.2,.8,.2,1)_both]" role="alertdialog" aria-modal="true">
-                    <h2 class="m-0 text-xl font-extrabold text-[#0b2b50]">Hapus pemegang aset?</h2>
+                    <h2 class="m-0 text-xl font-extrabold text-[#0b2b50]">Hapus data pegawai?</h2>
                     <p class="m-0 mt-3 text-[11px] leading-relaxed text-[#718095]">
                         Data <strong>{{ $holder->nama_pegawai }}</strong> akan dihapus secara permanen dan tidak dapat dipulihkan. Apakah Anda yakin ingin melanjutkan?
                     </p>

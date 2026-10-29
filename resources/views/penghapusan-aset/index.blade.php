@@ -4,11 +4,11 @@
 
 @php
     use App\Enums\AssetDisposalStatus;
-    use App\Enums\UserRole;
-
-    $role = auth()->user()?->role;
-    $canCreateDisposal = in_array($role, [UserRole::TimAset->value, UserRole::SuperAdmin->value], true);
-    $canApproveDisposal = in_array($role, [UserRole::KasubbagUmumPerencanaan->value, UserRole::SuperAdmin->value], true);
+    $user = auth()->user();
+    $canCreateDisposal = $user?->hasPermission('penghapusan.create') ?? false;
+    $canApproveDisposal = $user?->hasPermission('penghapusan.approve') ?? false;
+    $canDownloadDisposal = $user?->hasPermission('penghapusan.download') ?? false;
+    $canExportDisposal = $user?->hasPermission('penghapusan.export') ?? false;
     $numberStart = ($disposals->currentPage() - 1) * $disposals->perPage();
     $selectedPerPage = (int) request('per_page', $disposals->perPage());
     $statusClass = fn ($status) => match ($status instanceof AssetDisposalStatus ? $status->value : $status) {
@@ -61,7 +61,9 @@
                 @endforeach
             </select>
             <div class="flex flex-wrap items-center gap-3">
-                <x-export-dropdown dataset="penghapusan-aset" />
+                @if ($canExportDisposal)
+                    <x-export-dropdown dataset="penghapusan-aset" />
+                @endif
             </div>
         </form>
 
@@ -257,9 +259,11 @@
                                                 <a class="grid h-[30px] flex-1 place-items-center rounded-[7px] border border-[#dbe3eb] bg-white text-[#146bb5] no-underline transition hover:border-[#b8c6d6] hover:bg-[#f8fafc]" href="{{ $evidencePreviewUrl($evidence) }}" target="_blank" rel="noopener noreferrer" title="Lihat bukti" aria-label="Lihat bukti {{ $evidence->nama_file ?: 'kondisi' }}">
                                                     <svg class="h-[14px] w-[14px] fill-none stroke-current stroke-[2.2] [stroke-linecap:round] [stroke-linejoin:round]" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" /><circle cx="12" cy="12" r="3" /></svg>
                                                 </a>
-                                                <a class="grid h-[30px] flex-1 place-items-center rounded-[7px] border border-[#dbe3eb] bg-white text-[#5e7084] no-underline transition hover:border-[#b8c6d6] hover:bg-[#f8fafc]" href="{{ $evidenceUrl($evidence) }}" title="Unduh bukti" aria-label="Unduh bukti {{ $evidence->nama_file ?: 'kondisi' }}">
-                                                    <svg class="h-[14px] w-[14px] fill-none stroke-current stroke-[2.2] [stroke-linecap:round] [stroke-linejoin:round]" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12" /><path d="m7 10 5 5 5-5" /><path d="M5 21h14" /></svg>
-                                                </a>
+                                                @if ($canDownloadDisposal)
+                                                    <a class="grid h-[30px] flex-1 place-items-center rounded-[7px] border border-[#dbe3eb] bg-white text-[#5e7084] no-underline transition hover:border-[#b8c6d6] hover:bg-[#f8fafc]" href="{{ $evidenceUrl($evidence) }}" title="Unduh bukti" aria-label="Unduh bukti {{ $evidence->nama_file ?: 'kondisi' }}">
+                                                        <svg class="h-[14px] w-[14px] fill-none stroke-current stroke-[2.2] [stroke-linecap:round] [stroke-linejoin:round]" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12" /><path d="m7 10 5 5 5-5" /><path d="M5 21h14" /></svg>
+                                                    </a>
+                                                @endif
                                             </div>
                                         </div>
                                     @endforeach
@@ -271,7 +275,9 @@
                                         <div class="inline-flex w-max max-w-full items-center gap-1 rounded-[8px] border border-[#dbe3eb] bg-white p-1">
                                             <span class="max-w-[220px] truncate px-2 text-[9px] font-bold text-[#5e7084]">{{ $evidence->nama_file ?: 'Video kondisi' }}</span>
                                             <a class="grid h-[28px] w-[32px] place-items-center rounded-[7px] text-[#146bb5] no-underline hover:bg-[#f8fafc]" href="{{ $evidencePreviewUrl($evidence) }}" target="_blank" rel="noopener noreferrer" title="Lihat video" aria-label="Lihat video {{ $evidence->nama_file ?: 'kondisi' }}"><svg class="h-[14px] w-[14px] fill-none stroke-current stroke-[2.2] [stroke-linecap:round] [stroke-linejoin:round]" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" /><circle cx="12" cy="12" r="3" /></svg></a>
-                                            <a class="grid h-[28px] w-[32px] place-items-center rounded-[7px] text-[#5e7084] no-underline hover:bg-[#f8fafc]" href="{{ $evidenceUrl($evidence) }}" title="Unduh video" aria-label="Unduh video {{ $evidence->nama_file ?: 'kondisi' }}"><svg class="h-[14px] w-[14px] fill-none stroke-current stroke-[2.2] [stroke-linecap:round] [stroke-linejoin:round]" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12" /><path d="m7 10 5 5 5-5" /><path d="M5 21h14" /></svg></a>
+                                            @if ($canDownloadDisposal)
+                                                <a class="grid h-[28px] w-[32px] place-items-center rounded-[7px] text-[#5e7084] no-underline hover:bg-[#f8fafc]" href="{{ $evidenceUrl($evidence) }}" title="Unduh video" aria-label="Unduh video {{ $evidence->nama_file ?: 'kondisi' }}"><svg class="h-[14px] w-[14px] fill-none stroke-current stroke-[2.2] [stroke-linecap:round] [stroke-linejoin:round]" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12" /><path d="m7 10 5 5 5-5" /><path d="M5 21h14" /></svg></a>
+                                            @endif
                                         </div>
                                     @endforeach
                                 </div>
@@ -290,10 +296,12 @@
                                         <svg class="h-[13px] w-[13px] fill-none stroke-current stroke-[2.2] [stroke-linecap:round] [stroke-linejoin:round]" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" /><circle cx="12" cy="12" r="3" /></svg>
                                         View
                                     </a>
-                                    <a class="page-action-button inline-flex min-h-[32px] items-center justify-center gap-1.5 rounded-[8px] border border-[#dbe3eb] bg-white px-3 text-[9px] font-bold text-[#5e7084] no-underline transition hover:border-[#b8c6d6] hover:bg-[#f8fafc]" href="{{ route('penghapusan-aset.dokumen', $disposal) }}">
-                                        <svg class="h-[13px] w-[13px] fill-none stroke-current stroke-[2.2] [stroke-linecap:round] [stroke-linejoin:round]" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12" /><path d="m7 10 5 5 5-5" /><path d="M5 21h14" /></svg>
-                                        Download
-                                    </a>
+                                    @if ($canDownloadDisposal)
+                                        <a class="page-action-button inline-flex min-h-[32px] items-center justify-center gap-1.5 rounded-[8px] border border-[#dbe3eb] bg-white px-3 text-[9px] font-bold text-[#5e7084] no-underline transition hover:border-[#b8c6d6] hover:bg-[#f8fafc]" href="{{ route('penghapusan-aset.dokumen', $disposal) }}">
+                                            <svg class="h-[13px] w-[13px] fill-none stroke-current stroke-[2.2] [stroke-linecap:round] [stroke-linejoin:round]" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12" /><path d="m7 10 5 5 5-5" /><path d="M5 21h14" /></svg>
+                                            Download
+                                        </a>
+                                    @endif
                                 </div>
                             @endif
                         </div>
@@ -357,6 +365,7 @@ document.addEventListener('DOMContentLoaded', () => {
         drive: document.querySelector('[data-disposal-mutation-drive]'),
     }
     const submissionNote = document.querySelector('[data-disposal-submission-note]')
+    const canDownloadDisposal = @json($canDownloadDisposal)
 
     const resetPanel = () => {
         panel?.classList.add('hidden')
@@ -429,14 +438,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 viewAnchor.innerHTML = '<svg class="h-[14px] w-[14px] fill-none stroke-current stroke-[2.2] [stroke-linecap:round] [stroke-linejoin:round]" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" /><circle cx="12" cy="12" r="3" /></svg>'
                 actions.append(viewAnchor)
 
-                const downloadAnchor = window.document.createElement('a')
-                downloadAnchor.className = 'grid h-[30px] flex-1 place-items-center rounded-[7px] border border-[#dbe3eb] bg-white text-[#5e7084] no-underline transition hover:border-[#b8c6d6] hover:bg-[#f8fafc]'
-                downloadAnchor.href = evidence.url
-                downloadAnchor.download = evidence.nama_file || ''
-                downloadAnchor.title = 'Unduh bukti'
-                downloadAnchor.setAttribute('aria-label', `Unduh bukti ${evidence.nama_file || 'kondisi'}`)
-                downloadAnchor.innerHTML = '<svg class="h-[14px] w-[14px] fill-none stroke-current stroke-[2.2] [stroke-linecap:round] [stroke-linejoin:round]" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12" /><path d="m7 10 5 5 5-5" /><path d="M5 21h14" /></svg>'
-                actions.append(downloadAnchor)
+                if (canDownloadDisposal) {
+                    const downloadAnchor = window.document.createElement('a')
+                    downloadAnchor.className = 'grid h-[30px] flex-1 place-items-center rounded-[7px] border border-[#dbe3eb] bg-white text-[#5e7084] no-underline transition hover:border-[#b8c6d6] hover:bg-[#f8fafc]'
+                    downloadAnchor.href = evidence.url
+                    downloadAnchor.download = evidence.nama_file || ''
+                    downloadAnchor.title = 'Unduh bukti'
+                    downloadAnchor.setAttribute('aria-label', `Unduh bukti ${evidence.nama_file || 'kondisi'}`)
+                    downloadAnchor.innerHTML = '<svg class="h-[14px] w-[14px] fill-none stroke-current stroke-[2.2] [stroke-linecap:round] [stroke-linejoin:round]" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12" /><path d="m7 10 5 5 5-5" /><path d="M5 21h14" /></svg>'
+                    actions.append(downloadAnchor)
+                }
                 footer.append(actions)
             }
 

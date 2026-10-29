@@ -17,6 +17,8 @@ class AssetMaintenance extends Model
 {
     protected $table = 'pemeliharaan_aset';
 
+    private const INITIAL_DOCUMENT_TYPES = ['foto_sebelum', 'video_sebelum'];
+
     protected $fillable = [
         'asset_id',
         'pemohon_id',
@@ -89,6 +91,63 @@ class AssetMaintenance extends Model
     public function documents(): HasMany
     {
         return $this->hasMany(AssetMaintenanceDocument::class, 'pemeliharaan_aset_id');
+    }
+
+    public function approvalHistories(): HasMany
+    {
+        return $this->hasMany(RiwayatPersetujuan::class, 'pengajuan_id')
+            ->where('jenis_pengajuan', 'maintenance');
+    }
+
+    /**
+     * Returns the reason deletion is unsafe, or null when a submitted request
+     * only has its optional initial administrative history.
+     */
+    public function deletionBlockReason(): ?string
+    {
+        if ($this->status !== AssetMaintenanceStatus::Submitted) {
+            return 'Hanya pengajuan yang masih menunggu verifikasi dapat dihapus.';
+        }
+
+        $documents = $this->relationLoaded('documents')
+            ? $this->documents
+            : $this->documents()->get();
+
+        if (filled($this->foto_setelah)) {
+            return 'Data pemeliharaan tidak dapat dihapus karena memiliki dokumentasi hasil pemeliharaan yang harus dipertahankan.';
+        }
+
+        if ($documents->contains(fn (AssetMaintenanceDocument $document): bool => ! in_array($document->jenis_dokumen, self::INITIAL_DOCUMENT_TYPES, true))) {
+            return 'Data pemeliharaan tidak dapat dihapus karena memiliki dokumen proses yang harus dipertahankan.';
+        }
+
+        if (filled($this->foto_sebelum) && ! $documents->contains(
+            fn (AssetMaintenanceDocument $document): bool => $document->jenis_dokumen === 'foto_sebelum'
+                && $document->path_file === $this->foto_sebelum,
+        )) {
+            return 'Data pemeliharaan tidak dapat dihapus karena dokumentasi pengajuan tidak dapat dipastikan keamanannya.';
+        }
+
+        $histories = $this->relationLoaded('approvalHistories')
+            ? $this->approvalHistories
+            : $this->approvalHistories()->get();
+
+        if ($histories->isEmpty()) {
+            return null;
+        }
+
+        if ($histories->count() === 1
+            && $histories->first()->tahap === 'pengajuan'
+            && $histories->first()->status === 'dibuat') {
+            return null;
+        }
+
+        return 'Data pemeliharaan tidak dapat dihapus karena memiliki riwayat proses yang harus dipertahankan.';
+    }
+
+    public function isSafelyDeletable(): bool
+    {
+        return $this->deletionBlockReason() === null;
     }
 
     public function hasCompleteReportData(): bool

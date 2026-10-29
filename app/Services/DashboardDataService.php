@@ -10,8 +10,10 @@ use App\Enums\LoanStatus;
 use App\Enums\PermintaanPersediaanStatus;
 use App\Enums\ProcurementProposalStatus;
 use App\Enums\ProcurementStatus;
+use App\Enums\WorkUnit;
 use App\Models\Asset;
 use App\Models\AssetCategory;
+use App\Models\AssetConditionMutation;
 use App\Models\AssetDisposalRequest;
 use App\Models\AssetMaintenance;
 use App\Models\DetailKir;
@@ -642,58 +644,100 @@ class DashboardDataService
         return $distribution;
     }
 
-    /** @return list<array{month: string, incoming: int, borrowed: int, disposed: int}> */
+    /** @return list<array{month: string, incoming: int, borrowed: int, returned: int, maintenance: int, condition_changed: int, disposed: int}> */
     private function activityChart(): array
     {
-        $start = today()->startOfMonth()->subMonths(5);
-        $chart = collect(range(0, 5))->mapWithKeys(function (int $offset) use ($start): array {
-            $month = $start->copy()->addMonths($offset)->format('Y-m');
+        $now = now();
+        $requestedMonth = request()->query('activity_month');
+        $monthPattern = sprintf('/^%d-(0[1-9]|1[0-2])$/', $now->year);
+        $start = is_string($requestedMonth) && preg_match($monthPattern, $requestedMonth) === 1
+            ? Carbon::createFromFormat('!Y-m', $requestedMonth, config('app.timezone'))->startOfMonth()
+            : $now->copy()->startOfMonth();
+        $end = $start->copy()->addMonth();
+        $month = $start->format('Y-m');
+        $chart = collect([
+            $month => [
+                'month' => $month,
+                'incoming' => 0,
+                'borrowed' => 0,
+                'returned' => 0,
+                'maintenance' => 0,
+                'condition_changed' => 0,
+                'disposed' => 0,
+            ],
+        ]);
 
-            return [$month => ['month' => $month, 'incoming' => 0, 'borrowed' => 0, 'disposed' => 0]];
-        });
+        $addUnits = static function (Collection $chart, CarbonInterface $date, string $key, int $units): void {
+            $month = $date->format('Y-m');
+            if (! $chart->has($month) || $units <= 0) {
+                return;
+            }
+
+            $chart[$month] = [
+                ...$chart[$month],
+                $key => $chart[$month][$key] + $units,
+            ];
+        };
 
         Procurement::query()
-            ->where('status', ProcurementStatus::Verified->value)
-            ->where('tanggal_verifikasi', '>=', $start)
-            ->get(['jumlah_diterima', 'tanggal_verifikasi'])
-            ->each(function (Procurement $procurement) use ($chart): void {
-                $month = $procurement->tanggal_verifikasi->format('Y-m');
-                if ($chart->has($month)) {
-                    $chart[$month] = [
-                        ...$chart[$month],
-                        'incoming' => $chart[$month]['incoming'] + $procurement->jumlah_diterima,
-                    ];
-                }
+            ->whereIn('status', [ProcurementStatus::Received->value, ProcurementStatus::Verified->value])
+            ->whereNotNull('tanggal_penerimaan')
+            ->where('tanggal_penerimaan', '>=', $start)
+            ->where('tanggal_penerimaan', '<', $end)
+            ->get(['jumlah_diterima', 'tanggal_penerimaan'])
+            ->each(function (Procurement $procurement) use ($chart, $addUnits): void {
+                $addUnits($chart, $procurement->tanggal_penerimaan, 'incoming', (int) $procurement->jumlah_diterima);
             });
 
         LoanRequest::query()
             ->withCount('details')
+            ->whereIn('status', [LoanStatus::Borrowed->value, LoanStatus::Returned->value])
             ->whereNotNull('tanggal_penyerahan')
             ->where('tanggal_penyerahan', '>=', $start)
+            ->where('tanggal_penyerahan', '<', $end)
             ->get(['id', 'jumlah', 'tanggal_penyerahan'])
-            ->each(function (LoanRequest $loan) use ($chart): void {
-                $month = $loan->tanggal_penyerahan->format('Y-m');
-                if ($chart->has($month)) {
-                    $chart[$month] = [
-                        ...$chart[$month],
-                        'borrowed' => $chart[$month]['borrowed'] + ((int) $loan->details_count ?: (int) $loan->jumlah),
-                    ];
-                }
+            ->each(function (LoanRequest $loan) use ($chart, $addUnits): void {
+                $addUnits($chart, $loan->tanggal_penyerahan, 'borrowed', (int) $loan->details_count ?: (int) $loan->jumlah);
             });
 
-        AssetDisposalRequest::query()
-            ->with('asset:id,jumlah')
-            ->where('status', AssetDisposalStatus::Approved->value)
-            ->where('tanggal_pemeriksaan', '>=', $start)
-            ->get(['id', 'aset_id', 'tanggal_pemeriksaan'])
-            ->each(function (AssetDisposalRequest $disposal) use ($chart): void {
-                $month = $disposal->tanggal_pemeriksaan->format('Y-m');
-                if ($chart->has($month)) {
-                    $chart[$month] = [
-                        ...$chart[$month],
-                        'disposed' => $chart[$month]['disposed'] + ($disposal->asset?->jumlah ?? 0),
-                    ];
-                }
+        LoanRequest::query()
+            ->withCount('details')
+            ->where('status', LoanStatus::Returned->value)
+            ->whereNotNull('tanggal_pengembalian')
+            ->where('tanggal_pengembalian', '>=', $start)
+            ->where('tanggal_pengembalian', '<', $end)
+            ->get(['id', 'jumlah', 'tanggal_pengembalian'])
+            ->each(function (LoanRequest $loan) use ($chart, $addUnits): void {
+                $addUnits($chart, $loan->tanggal_pengembalian, 'returned', (int) $loan->details_count ?: (int) $loan->jumlah);
+            });
+
+        AssetMaintenance::query()
+            ->where('status', AssetMaintenanceStatus::Completed->value)
+            ->whereNotNull('tanggal_selesai')
+            ->where('tanggal_selesai', '>=', $start)
+            ->where('tanggal_selesai', '<', $end)
+            ->get(['jumlah_dipelihara', 'tanggal_selesai'])
+            ->each(function (AssetMaintenance $maintenance) use ($chart, $addUnits): void {
+                $addUnits($chart, $maintenance->tanggal_selesai, 'maintenance', max(1, (int) $maintenance->jumlah_dipelihara));
+            });
+
+        AssetConditionMutation::query()
+            ->where('jumlah', '>', 0)
+            ->where('created_at', '>=', $start)
+            ->where('created_at', '<', $end)
+            ->get(['jumlah', 'created_at'])
+            ->each(function (AssetConditionMutation $mutation) use ($chart, $addUnits): void {
+                $addUnits($chart, $mutation->created_at, 'condition_changed', (int) $mutation->jumlah);
+            });
+
+        Asset::query()
+            ->whereNotNull('tanggal_penghapusan')
+            ->where('tanggal_penghapusan', '>=', $start)
+            ->where('tanggal_penghapusan', '<', $end)
+            ->whereHas('disposalRequests', fn (Builder $query) => $query->where('status', AssetDisposalStatus::Approved->value))
+            ->get(['jumlah', 'tanggal_penghapusan'])
+            ->each(function (Asset $asset) use ($chart, $addUnits): void {
+                $addUnits($chart, $asset->tanggal_penghapusan, 'disposed', (int) $asset->jumlah);
             });
 
         return $chart->values()->all();
@@ -720,13 +764,21 @@ class DashboardDataService
                 $procurement->updated_at,
             )));
 
-        ProcurementProposal::query()->latest('updated_at')->limit(5)->get()
-            ->each(fn (ProcurementProposal $proposal) => $activities->push($this->activity(
-                'procurement_proposal',
-                "Usulan pengadaan {$proposal->nama_barang}",
-                $proposal->status->label(),
-                $proposal->updated_at,
-            )));
+        ProcurementProposal::query()->with(['requester', 'details'])->latest('updated_at')->limit(5)->get()
+            ->each(function (ProcurementProposal $proposal) use ($activities): void {
+                $hasDetails = $proposal->details->isNotEmpty();
+                $description = $hasDetails
+                    ? 'Usulan Pengadaan — '.WorkUnit::labelFor($proposal->unit_kerja_snapshot ?: $proposal->requester?->work_unit)
+                        .' ('.$proposal->details->count().' barang)'
+                    : "Usulan pengadaan {$proposal->nama_barang}";
+
+                $activities->push($this->activity(
+                    'procurement_proposal',
+                    $description,
+                    $proposal->status->label(),
+                    $proposal->updated_at,
+                ));
+            });
 
         AssetDisposalRequest::query()->with('asset:id,nama_aset')->latest('updated_at')->limit(5)->get()
             ->each(fn (AssetDisposalRequest $disposal) => $activities->push($this->activity(

@@ -174,7 +174,6 @@ class AssetReportService
                 'tersedia' => $status === 'tersedia' ? (int) $item->stok : 0,
                 'stock_status' => $status,
                 'label_stock_status' => match ($status) { 'habis' => 'Stok Habis', 'menipis' => 'Stok Menipis', default => 'Tersedia' },
-                'label_verification' => $item->status_verifikasi?->label() ?: '-',
                 'status' => match ($status) { 'habis' => 'Stok Habis', 'menipis' => 'Stok Menipis', default => 'Tersedia' },
             ];
         })->values()->all();

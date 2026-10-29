@@ -128,16 +128,15 @@ class DataExportService
             $item->satuan ?: '-',
             (int) $item->stok,
             $this->stockStatusLabel((int) $item->stok),
-            $item->status_verifikasi?->label() ?: $this->label($item->status_verifikasi),
             $item->lokasi_penyimpanan ?: '-',
         ]);
 
-        return ['title' => 'Stock Opname / Persediaan', 'headers' => ['No', 'Kode Persediaan', 'Kode Internal', 'Nama Barang', 'Kategori', 'Satuan', 'Stok', 'Status Stok', 'Status Verifikasi', 'Lokasi'], 'rows' => $rows];
+        return ['title' => 'Stock Opname / Persediaan', 'headers' => ['No', 'Kode Persediaan', 'Kode Internal', 'Nama Barang', 'Kategori', 'Satuan', 'Stok', 'Status Stok', 'Lokasi'], 'rows' => $rows];
     }
 
     private function permintaanPersediaan(Request $request): array
     {
-        $query = PermintaanPersediaan::query()->with(['pemohon', 'details']);
+        $query = PermintaanPersediaan::query()->with(['pemohon', 'dicatatOleh', 'details']);
         if ($this->role($request) === UserRole::AdminBidang->value) {
             $query->where('pemohon_id', $request->user()->id);
         }
@@ -148,6 +147,8 @@ class DataExportService
             $search = $request->string('search')->toString();
             $query->where(fn (Builder $q) => $q->where('nomor_permintaan', 'like', "%{$search}%")
                 ->orWhere('keperluan', 'like', "%{$search}%")
+                ->orWhere('nama_pemohon_snapshot', 'like', "%{$search}%")
+                ->orWhere('nip_pemohon_snapshot', 'like', "%{$search}%")
                 ->orWhereHas('pemohon', fn (Builder $u) => $u->where('name', 'like', "%{$search}%")->orWhere('nip', 'like', "%{$search}%"))
                 ->orWhereHas('details', fn (Builder $d) => $d
                     ->where('nama_barang_snapshot', 'like', "%{$search}%")
@@ -156,12 +157,18 @@ class DataExportService
 
         $number = 0;
         $rows = $query->latest()->get()->flatMap(function (PermintaanPersediaan $item) use (&$number) {
+            $applicantName = $item->nama_pemohon_snapshot ?: $item->pemohon?->name ?: '-';
+            $applicantWorkUnit = $item->unit_kerja_snapshot ?: $item->pemohon?->work_unit;
+            $applicantNip = $item->nip_pemohon_snapshot ?: $item->pemohon?->nip ?: '-';
+            $recordedBy = $item->dicatatOleh?->name ?: $item->pemohon?->name ?: '-';
+
             return $item->details->map(fn ($detail) => [
                 ++$number,
                 $item->nomor_permintaan,
-                $item->pemohon?->name ?: '-',
-                WorkUnit::labelFor($item->pemohon?->work_unit),
-                $item->pemohon?->nip ?: '-',
+                $applicantName,
+                WorkUnit::labelFor($applicantWorkUnit),
+                $applicantNip,
+                $recordedBy,
                 $this->date($item->tanggal_permintaan),
                 $detail->nama_barang_snapshot,
                 $detail->jumlah_diminta,
@@ -171,7 +178,7 @@ class DataExportService
             ]);
         });
 
-        return ['title' => 'Permintaan Barang Persediaan', 'headers' => ['No', 'Nomor Permintaan', 'Pemohon', 'Unit Kerja', 'NIP', 'Tanggal', 'Nama Barang', 'Jumlah', 'Satuan', 'Justifikasi Kebutuhan', 'Status'], 'rows' => $rows];
+        return ['title' => 'Permintaan Barang Persediaan', 'headers' => ['No', 'Nomor Permintaan', 'Pemohon', 'Unit Kerja', 'NIP', 'Dicatat Oleh', 'Tanggal', 'Nama Barang', 'Jumlah', 'Satuan', 'Justifikasi Kebutuhan', 'Status'], 'rows' => $rows];
     }
 
     private function peminjaman(Request $request): array
@@ -238,30 +245,55 @@ class DataExportService
 
     private function usulanPengadaan(Request $request): array
     {
-        $query = ProcurementProposal::query()->with(['requester']);
+        $query = ProcurementProposal::query()->with(['requester', 'details.responsiblePerson']);
         if ($this->role($request) === UserRole::AdminBidang->value) {
             $query->where('pengusul_id', $request->user()->id);
         }
         if ($request->filled('status')) {
             $query->where('status', $request->string('status'));
         }
+        $selectedSpendingType = $request->string('jenis_belanja')->toString();
+        $spendingTypes = ProcurementProposal::spendingTypes();
+        if ($selectedSpendingType === 'unclassified') {
+            $query->whereNull('jenis_belanja');
+        } elseif (array_key_exists($selectedSpendingType, $spendingTypes)) {
+            $query->where('jenis_belanja', $selectedSpendingType);
+        }
         if ($request->filled('search')) {
-            $query->where('nama_barang', 'like', '%'.$request->string('search')->toString().'%');
+            $search = '%'.$request->string('search')->toString().'%';
+            $query->where(fn (Builder $query) => $query
+                ->where('nama_barang', 'like', $search)
+                ->orWhereHas('details', fn (Builder $details) => $details->where('nama_barang', 'like', $search)));
         }
 
-        $rows = $query->latest()->get()->map(fn (ProcurementProposal $item, int $i) => [
-            $i + 1,
-            '#'.$item->id,
-            $item->requester?->name ?: '-',
-            WorkUnit::labelFor($item->requester?->work_unit),
-            $item->nama_barang,
-            (int) $item->jumlah,
-            $item->spesifikasi ?: '-',
-            $item->alasan_kebutuhan ?: '-',
-            $item->status?->label() ?: '-',
-        ]);
+        $rows = $query->latest()->get()
+            ->flatMap(function (ProcurementProposal $item): Collection {
+                $details = $item->details->isNotEmpty()
+                    ? $item->details
+                    : collect([(object) [
+                        'nama_barang' => $item->nama_barang,
+                        'spesifikasi' => $item->spesifikasi,
+                        'jumlah' => $item->jumlah,
+                        'estimasi_harga_satuan' => null,
+                    ]]);
 
-        return ['title' => 'Usulan Pengadaan', 'headers' => ['No', 'Nomor', 'Pengaju', 'Unit Kerja', 'Barang', 'Jumlah', 'Spesifikasi', 'Alasan', 'Status'], 'rows' => $rows];
+                return $details->map(fn ($detail) => [
+                    '#'.$item->id,
+                    $item->requester?->name ?: '-',
+                    WorkUnit::labelFor($item->unit_kerja_snapshot ?: $item->requester?->work_unit),
+                    $item->tahun_anggaran ?: '-',
+                    $item->jenis_belanja_label,
+                    $detail->nama_barang ?: '-',
+                    $detail->spesifikasi ?: '-',
+                    $detail->jumlah ?? '-',
+                    $detail->estimasi_harga_satuan ?? '-',
+                    $item->status?->label() ?: '-',
+                ]);
+            })
+            ->values()
+            ->map(fn (array $row, int $i): array => [$i + 1, ...$row]);
+
+        return ['title' => 'Usulan Pengadaan', 'headers' => ['No', 'Nomor', 'Pengaju', 'Unit Kerja', 'Tahun Anggaran', 'Jenis Belanja', 'Barang', 'Spesifikasi', 'Jumlah', 'Harga Satuan', 'Status'], 'rows' => $rows];
     }
 
     private function pengadaan(Request $request): array
@@ -335,27 +367,27 @@ class DataExportService
 
     private function ruangan(Request $request): array
     {
-        $query = Ruangan::query()->with(['penanggungJawab', 'kodeLokasi'])->withCount('kirDetails');
+        $query = Ruangan::query()->with(['penanggungJawab', 'pemegangAset', 'kodeLokasi'])->withCount('kirDetails');
         if ($request->filled('search')) {
             $search = $request->string('search')->toString();
-            $query->where(fn (Builder $q) => $q->where('kode_ruangan', 'like', "%{$search}%")->orWhere('nama_ruangan', 'like', "%{$search}%")->orWhereHas('penanggungJawab', fn (Builder $u) => $u->where('name', 'like', "%{$search}%")));
+            $query->where(fn (Builder $q) => $q->where('kode_ruangan', 'like', "%{$search}%")->orWhere('nama_ruangan', 'like', "%{$search}%")->orWhereHas('penanggungJawab', fn (Builder $u) => $u->where('name', 'like', "%{$search}%"))->orWhereHas('pemegangAset', fn (Builder $holder) => $holder->where('nama_pegawai', 'like', "%{$search}%")));
         }
         if ($request->filled('status')) {
             $query->where('status', $request->string('status'));
         }
 
-        return ['title' => 'Manajemen Ruangan', 'headers' => ['No', 'Kode Ruangan', 'Nama Ruangan', 'Kode Lokasi', 'Penanggung Jawab', 'Jumlah Aset', 'Status', 'Keterangan'], 'rows' => $query->latest()->get()->map(fn (Ruangan $item, $i) => [$i + 1, $item->kode_ruangan, $item->nama_ruangan, $item->kodeLokasi?->kode_lokasi ?: '-', $item->penanggungJawab?->name ?: '-', $item->kir_details_count, $item->status?->label() ?: '-', $item->keterangan ?: '-'])];
+        return ['title' => 'Manajemen Ruangan', 'headers' => ['No', 'Kode Ruangan', 'Nama Ruangan', 'Kode Lokasi', 'Penanggung Jawab', 'Jumlah Aset', 'Status', 'Keterangan'], 'rows' => $query->latest()->get()->map(fn (Ruangan $item, $i) => [$i + 1, $item->kode_ruangan, $item->nama_ruangan, $item->kodeLokasi?->kode_lokasi ?: '-', $item->pemegangAset?->nama_pegawai ?? $item->penanggungJawab?->name ?? '-', $item->kir_details_count, $item->status?->label() ?: '-', $item->keterangan ?: '-'])];
     }
 
     private function kirIndex(Request $request): array
     {
-        $query = Ruangan::query()->with(['penanggungJawab', 'kodeLokasi'])->withCount('kirDetails');
+        $query = Ruangan::query()->with(['penanggungJawab', 'pemegangAset', 'kodeLokasi'])->withCount('kirDetails');
         if ($request->filled('search')) {
             $search = $request->string('search')->toString();
             $query->where(fn (Builder $q) => $q->where('kode_ruangan', 'like', "%{$search}%")->orWhere('nama_ruangan', 'like', "%{$search}%"));
         }
 
-        return ['title' => 'Kartu Inventaris Ruangan', 'headers' => ['No', 'Kode Ruangan', 'Nama Ruangan', 'Kode Lokasi', 'Penanggung Jawab', 'Jumlah Aset'], 'rows' => $query->latest()->get()->map(fn (Ruangan $item, $i) => [$i + 1, $item->kode_ruangan, $item->nama_ruangan, $item->kodeLokasi?->kode_lokasi ?: '-', $item->penanggungJawab?->name ?: '-', $item->kir_details_count])];
+        return ['title' => 'Kartu Inventaris Ruangan', 'headers' => ['No', 'Kode Ruangan', 'Nama Ruangan', 'Kode Lokasi', 'Penanggung Jawab', 'Jumlah Aset'], 'rows' => $query->latest()->get()->map(fn (Ruangan $item, $i) => [$i + 1, $item->kode_ruangan, $item->nama_ruangan, $item->kodeLokasi?->kode_lokasi ?: '-', $item->pemegangAset?->nama_pegawai ?? $item->penanggungJawab?->name ?? '-', $item->kir_details_count])];
     }
 
     private function kirDetail(Request $request): array

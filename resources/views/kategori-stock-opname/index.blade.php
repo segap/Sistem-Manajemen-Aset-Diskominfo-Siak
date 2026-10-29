@@ -14,7 +14,7 @@
             <h1 class="m-0 mb-[3px] text-[clamp(25px,2.5vw,34px)] font-extrabold tracking-[-.035em] text-[#0b2b50]">Kategori Stock Opname</h1>
             <p class="m-0 text-[13px] text-[#66758a]">Kelola kategori barang persediaan dan barang habis pakai.</p>
         </div>
-        @if ($canManage)
+        @if ($canCreate)
             <button class="page-action-button inline-flex min-h-[38px] items-center justify-center gap-2 rounded-[9px] border-0 bg-[#146bb5] px-3.5 text-[10px] font-bold text-white shadow-[0_8px_18px_rgb(20_107_181_/_16%)] transition hover:bg-[#0c568f] max-[580px]:w-full" type="button" data-modal-open="create-stock-category">
                 <span class="text-sm font-normal leading-none">+</span> Tambah Kategori
             </button>
@@ -48,7 +48,9 @@
                 @endif
             </form>
             <div class="flex flex-wrap items-center gap-3">
-                <x-export-dropdown dataset="kategori-stock-opname" />
+                @if ($canExport)
+                    <x-export-dropdown dataset="kategori-stock-opname" />
+                @endif
             </div>
         </div>
 
@@ -71,10 +73,14 @@
                             <td>{{ $number($category->items_count) }} Barang</td>
                             <td><span class="description-cell">{{ $category->keterangan ?: '-' }}</span></td>
                             <td class="action-column">
-                                @if ($canManage)
+                                @if ($canUpdate || $canDelete)
                                     <div class="row-actions">
-                                        <button type="button" data-modal-open="edit-stock-category-{{ $category->id }}" aria-label="Edit {{ $category->nama_kategori }}" title="Edit"><svg viewBox="0 0 24 24"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4L16.5 3.5Z" /></svg></button>
-                                        <button class="danger" type="button" data-modal-open="delete-stock-category-{{ $category->id }}" aria-label="Hapus {{ $category->nama_kategori }}" title="Hapus"><svg viewBox="0 0 24 24"><path d="M4 7h16m-10 4v6m4-6v6M9 7l1-3h4l1 3m3 0-1 14H7L6 7" /></svg></button>
+                                        @if ($canUpdate)
+                                            <button type="button" data-modal-open="edit-stock-category-{{ $category->id }}" aria-label="Edit {{ $category->nama_kategori }}" title="Edit"><svg viewBox="0 0 24 24"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4L16.5 3.5Z" /></svg></button>
+                                        @endif
+                                        @if ($canDelete)
+                                            <button class="danger" type="button" data-modal-open="delete-stock-category-{{ $category->id }}" aria-label="Hapus {{ $category->nama_kategori }}" title="Hapus"><svg viewBox="0 0 24 24"><path d="M4 7h16m-10 4v6m4-6v6M9 7l1-3h4l1 3m3 0-1 14H7L6 7" /></svg></button>
+                                        @endif
                                     </div>
                                 @else
                                     <span class="text-[10px] text-[#8a98aa]">Lihat saja</span>
@@ -88,7 +94,7 @@
                                     <span><svg viewBox="0 0 24 24"><path d="M4 7.5 12 3l8 4.5-8 4.5-8-4.5Z" /><path d="M4 12.5 12 17l8-4.5" /><path d="M4 17.5 12 22l8-4.5" /></svg></span>
                                     <strong>Belum ada kategori stock opname</strong>
                                     <p>{{ $search !== '' ? 'Tidak ada kategori yang cocok dengan pencarian.' : 'Tambahkan kategori untuk mengelompokkan barang persediaan.' }}</p>
-                                    @if ($canManage)
+                                    @if ($canCreate)
                                         <button class="page-action-button mt-3 inline-flex min-h-[38px] items-center justify-center rounded-[9px] border-0 bg-[#146bb5] px-3.5 text-[10px] font-bold text-white" type="button" data-modal-open="create-stock-category">+ Tambah Kategori</button>
                                     @endif
                                 </div>
@@ -119,10 +125,15 @@
         </div>
     </section>
 
-    @if ($canManage)
+    @if ($canCreate)
         @include('kategori-stock-opname.partials.form-modal', ['modalId' => 'create-stock-category', 'title' => 'Tambah Kategori', 'action' => route('kategori-stock-opname.store'), 'method' => 'POST', 'category' => null])
+    @endif
+    @if ($canUpdate || $canDelete)
         @foreach ($categories as $category)
+            @if ($canUpdate)
             @include('kategori-stock-opname.partials.form-modal', ['modalId' => 'edit-stock-category-'.$category->id, 'title' => 'Edit Kategori', 'action' => route('kategori-stock-opname.update', ['kategoriStockOpname' => $category, 'search' => $search, 'page' => $categories->currentPage(), 'per_page' => $selectedPerPage]), 'method' => 'PUT', 'category' => $category])
+            @endif
+            @if ($canDelete)
             <div class="fixed inset-0 z-80 hidden place-items-center overflow-y-auto bg-[rgb(5_22_38_/_48%)] p-6 animate-[modalBackdropIn_.2s_ease-out_both] max-[580px]:p-3" data-modal="delete-stock-category-{{ $category->id }}" role="presentation">
                 <section class="w-[min(410px,100%)] rounded-2xl bg-white p-[27px] text-center shadow-[0_25px_80px_rgb(2_19_34_/_28%)]" role="alertdialog" aria-modal="true">
                     <span class="mx-auto mb-3.5 grid h-12 w-12 place-items-center rounded-full bg-[#fff0ee] text-[21px] font-extrabold text-[#b4443d]">!</span>
@@ -138,6 +149,7 @@
                     </form>
                 </section>
             </div>
+            @endif
         @endforeach
     @endif
 </main>

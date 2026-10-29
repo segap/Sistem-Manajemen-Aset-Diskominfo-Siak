@@ -7,6 +7,8 @@ use App\Enums\ProcurementStatus;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Schema;
 
 class Procurement extends Model
 {
@@ -56,6 +58,33 @@ class Procurement extends Model
     {
         return $this->belongsToMany(Asset::class, 'pengadaan_aset', 'pengadaan_id', 'aset_id')
             ->withTimestamps();
+    }
+
+    /**
+     * Semua aset hasil pengadaan untuk tampilan detail, dengan fallback aman
+     * ke aset utama pada transaksi historis sebelum tabel pivot tersedia.
+     *
+     * @return Collection<int, Asset>
+     */
+    public function relatedAssetsForDisplay(): Collection
+    {
+        $assets = collect();
+
+        if (Schema::hasTable('pengadaan_aset')) {
+            $assets = $this->relationLoaded('assets')
+                ? $this->getRelation('assets')
+                : $this->assets()->get();
+        }
+
+        $primaryAsset = $this->relationLoaded('asset')
+            ? $this->getRelation('asset')
+            : $this->asset()->first();
+
+        if ($assets->isEmpty() && $primaryAsset) {
+            $assets->push($primaryAsset);
+        }
+
+        return $assets->unique('id')->values();
     }
 
     /** @return array<string, string> */

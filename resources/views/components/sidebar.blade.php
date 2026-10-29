@@ -19,6 +19,7 @@
         ['report', 'Laporan Tahunan', '/laporan-dokumen/tahunan'],
         ['report', 'Laporan Aset Unaudited', '/laporan-dokumen/aset-unaudited'],
         ['report', 'Laporan Aset Audited', '/laporan-dokumen/aset-audited'],
+        ['report', 'Laporan RKBMD', '/laporan-dokumen/rkbmd'],
         ['report', 'Berita Acara BMD', '/laporan-dokumen/berita-acara-bmd'],
     ];
     $laporanPersediaanSubmenus = [
@@ -49,13 +50,12 @@
             ['tools', 'Pemeliharaan', '/pemeliharaan-aset'],
             ['check', 'Persetujuan', '/persetujuan'],
             ['proposal', 'Usulan Pengadaan', '/usulan-pengadaan'],
-            ['cart', 'Pengadaan Barang', '/pengadaan'],
             ['trash', 'Penghapusan', '/penghapusan-aset'],
             ['report', 'Laporan', null, array_merge($laporanSubmenus, $laporanPersediaanSubmenus)],
             ['users', 'Manajemen User', null, [
                 ['users', 'Data User', '/users'],
                 ['users', 'Role', '/roles'],
-                ['users', 'Pemegang Aset', '/pemegang-aset'],
+                ['users', 'Data Pegawai', '/pemegang-aset'],
             ]],
         ],
         'admin' => [
@@ -73,13 +73,12 @@
             ['loan', 'Peminjaman', '/peminjaman'],
             ['tools', 'Pemeliharaan', '/pemeliharaan-aset'],
             ['check', 'Persetujuan', '/persetujuan'],
-            ['cart', 'Pengadaan Barang', '/pengadaan'],
             ['trash', 'Penghapusan', '/penghapusan-aset'],
             ['report', 'Laporan', null, $laporanSubmenus],
             ['users', 'Manajemen User', null, [
                 ['users', 'Data User', '/users'],
                 ['users', 'Role', '/roles'],
-                ['users', 'Pemegang Aset', '/pemegang-aset'],
+                ['users', 'Data Pegawai', '/pemegang-aset'],
             ]],
         ],
         'admin_bidang' => [
@@ -94,21 +93,20 @@
             ['trash', 'Penghapusan', '/penghapusan-aset'],
             ['report', 'Laporan', null, $laporanSubmenus],
             ['users', 'Manajemen User', null, [
-                ['users', 'Pemegang Aset', '/pemegang-aset'],
+                ['users', 'Data Pegawai', '/pemegang-aset'],
             ]],
         ],
         'tim_aset' => [
             ['box', 'Master Barang', '/aset'],
             ['check', 'Verifikasi Barang', '/verifikasi-barang'],
             ['proposal', 'Verifikasi Usulan', '/usulan-pengadaan'],
-            ['cart', 'Pengadaan Barang', '/pengadaan'],
             ['loan', 'Verifikasi Peminjaman', '/verifikasi-peminjaman'],
             ['tools', 'Pemeliharaan', '/pemeliharaan-aset'],
             ['stock', 'Verifikasi Stock Opname', '/stock-opname'],
             ['trash', 'Penghapusan', '/penghapusan-aset'],
             ['report', 'Laporan', null, $laporanSubmenus],
             ['users', 'Manajemen User', null, [
-                ['users', 'Pemegang Aset', '/pemegang-aset'],
+                ['users', 'Data Pegawai', '/pemegang-aset'],
             ]],
         ],
         'timaset_persediaan' => [
@@ -164,7 +162,6 @@
         '/pemeliharaan-aset' => 'pemeliharaan.view',
         '/persetujuan' => 'persetujuan.view',
         '/usulan-pengadaan' => 'usulan_pengadaan.view',
-        '/pengadaan' => 'pengadaan.view',
         '/penghapusan-aset' => 'penghapusan.view',
         '/laporan' => 'laporan_aset.view',
         '/laporan-dokumen/rekonsiliasi-bulanan' => 'laporan_rekonsiliasi_bulanan.view',
@@ -172,6 +169,7 @@
         '/laporan-dokumen/tahunan' => 'laporan_tahunan.view',
         '/laporan-dokumen/aset-unaudited' => 'laporan_aset_unaudited.view',
         '/laporan-dokumen/aset-audited' => 'laporan_aset_audited.view',
+        '/laporan-dokumen/rkbmd' => 'laporan_rkbmd.view',
         '/laporan-dokumen/berita-acara-bmd' => 'berita_acara_bmd.view',
         '/laporan-dokumen/persediaan-bulanan' => 'laporan_persediaan_bulanan.view',
         '/laporan-dokumen/persediaan-semester-1' => 'laporan_persediaan_semester_1.view',

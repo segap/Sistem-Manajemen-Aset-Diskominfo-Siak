@@ -67,6 +67,7 @@ class AssetController extends Controller
     {
         $validated = $request->validated();
         unset($validated['foto'], $validated['photos'], $validated['hapus_foto']);
+
         $unitCount = (int) $validated['jumlah'];
 
         if ($unitCount > 500) {
@@ -128,6 +129,19 @@ class AssetController extends Controller
 
         $validated = $request->validated();
         unset($validated['foto'], $validated['photos'], $validated['hapus_foto']);
+
+        abort_if(
+            ! $request->user()?->hasPermission('aset.condition.update')
+                && ($validated['kondisi'] ?? null) !== $asset->kondisi?->value,
+            403,
+            'Anda tidak memiliki hak akses untuk mengubah kondisi aset.',
+        );
+
+        abort_if(
+            (int) ($validated['jumlah'] ?? $asset->jumlah) !== (int) $asset->jumlah,
+            403,
+            'Jumlah aset tidak dapat diubah melalui pembaruan data dasar.',
+        );
 
         $oldTotal = (int) $asset->jumlah;
         $oldCondition = $asset->kondisi?->value;

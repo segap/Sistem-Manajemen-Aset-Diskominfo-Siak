@@ -10,7 +10,8 @@ class VerifyAssetMaintenanceRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return in_array($this->user()?->role, ['tim_aset', 'super_admin'], true);
+        return ($this->user()?->hasPermission('pemeliharaan.verify') ?? false)
+            && $this->user()?->role !== 'admin_bidang';
     }
 
     public function rules(): array

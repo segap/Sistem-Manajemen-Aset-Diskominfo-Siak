@@ -64,7 +64,10 @@
                             <td><span class="inline-flex rounded-md bg-[#eaf6ff] px-2.5 py-1 text-[10px] font-extrabold text-[#0868aa]">{{ $item->kode_ruangan }}</span></td>
                             <td>{{ $item->nama_ruangan }}</td>
                             <td>
-                                @if ($item->penanggungJawab)
+                                @if ($item->pemegangAset)
+                                    <strong>{{ $item->pemegangAset->nama_pegawai }}</strong>
+                                    <small class="mt-1 block text-[10px] text-[#7f8ea1]">{{ \App\Enums\WorkUnit::labelFor($item->pemegangAset->unit_kerja) }}</small>
+                                @elseif ($item->penanggungJawab)
                                     <strong>{{ $item->penanggungJawab->name }}</strong>
                                     <small class="mt-1 block text-[10px] text-[#7f8ea1]">{{ $item->penanggungJawab->email }}</small>
                                 @else

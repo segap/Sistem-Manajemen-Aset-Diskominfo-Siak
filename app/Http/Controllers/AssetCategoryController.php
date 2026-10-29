@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\AssetCategoryRequest;
 use App\Models\AssetCategory;
+use App\Support\CategoryAssetExportPermissions;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -28,6 +29,7 @@ class AssetCategoryController extends Controller
         return view('kategori-aset.index', [
             'categories' => $categories,
             'search' => $request->string('search')->toString(),
+            'exportFormats' => CategoryAssetExportPermissions::allowedFormats($request->user()),
         ]);
     }
 

@@ -13,7 +13,7 @@
     <section class="w-[min(760px,100%)] max-h-[calc(100vh-48px)] overflow-y-auto rounded-2xl bg-white shadow-[0_25px_80px_rgb(2_19_34_/_28%)] animate-[modalZoomIn_.24s_cubic-bezier(.2,.8,.2,1)_both]" role="dialog" aria-modal="true">
         <header class="flex min-h-[83px] items-center justify-between border-b border-[#edf1f5] px-[22px] py-[17px]">
             <div>
-                <h2 class="m-0 mt-[3px] text-xl font-extrabold text-[#0b2b50]">{{ $isEdit ? 'Edit Pemegang Aset' : 'Tambah Pemegang Aset' }}</h2>
+                <h2 class="m-0 mt-[3px] text-xl font-extrabold text-[#0b2b50]">{{ $isEdit ? 'Edit Pegawai' : 'Tambah Pegawai' }}</h2>
                 <p class="m-0 mt-1 text-[11px] text-[#7f8ea1]">Lengkapi data pegawai tanpa membuat akun login baru.</p>
             </div>
             <button class="inline-flex h-[34px] w-[34px] items-center justify-center rounded-[9px] border-0 bg-[#f2f5f8] text-[#8291a2]" type="button" data-modal-close aria-label="Tutup">
@@ -104,6 +104,12 @@
                     @error('nik') <small class="text-[8px] font-medium text-[#b8433b]">{{ $message }}</small> @enderror
                 </label>
             </div>
+
+            <label class="grid gap-[7px] text-[11px] font-bold text-[#405267]">
+                <span>Alamat Pegawai</span>
+                <textarea class="min-h-[78px] w-full resize-y rounded-[9px] border border-[#dce4ec] bg-white px-3 py-3 text-[10px] font-normal text-[#34465a] outline-0 transition focus:border-[#6fa9cf] focus:shadow-[0_0_0_3px_rgb(20_107_181_/_8%)]" name="alamat" rows="3" maxlength="1000" placeholder="Masukkan alamat lengkap pegawai">{{ $fieldValue('alamat', $holder->alamat ?? '') }}</textarea>
+                @error('alamat') <small class="text-[8px] font-medium text-[#b8433b]">{{ $message }}</small> @enderror
+            </label>
 
             <label class="grid gap-[7px] text-[11px] font-bold text-[#405267]">
                 <span>Upload Dokumen KTP <small class="font-semibold text-[#8a98aa]">(opsional, private)</small></span>

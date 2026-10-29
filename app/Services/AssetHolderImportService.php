@@ -6,6 +6,7 @@ use App\Enums\WorkUnit;
 use App\Models\AssetHolder;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -140,19 +141,28 @@ class AssetHolderImportService
         }
 
         $now = now();
+        $hasAddressColumn = Schema::hasColumn('pemegang_aset', 'alamat');
         $payload = collect($preview['rows'])
-            ->map(fn (array $row): array => [
-                'nama_pegawai' => $row['nama_pegawai'],
-                'nip' => $row['nip'],
-                'email' => $row['email'],
-                'unit_kerja' => $row['unit_kerja'],
-                'jabatan' => $row['jabatan'],
-                'nomor_hp' => $row['nomor_hp'],
-                'nik' => $row['nik'],
-                'is_active' => true,
-                'created_at' => $now,
-                'updated_at' => $now,
-            ])
+            ->map(function (array $row) use ($now, $hasAddressColumn): array {
+                $data = [
+                    'nama_pegawai' => $row['nama_pegawai'],
+                    'nip' => $row['nip'],
+                    'email' => $row['email'],
+                    'unit_kerja' => $row['unit_kerja'],
+                    'jabatan' => $row['jabatan'],
+                    'nomor_hp' => $row['nomor_hp'],
+                    'nik' => $row['nik'],
+                    'is_active' => true,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ];
+
+                if ($hasAddressColumn) {
+                    $data['alamat'] = $row['alamat'];
+                }
+
+                return $data;
+            })
             ->all();
 
         DB::transaction(fn () => AssetHolder::query()->insert($payload));
@@ -199,6 +209,7 @@ class AssetHolderImportService
             'jabatan' => 'jabatan',
             'nomor_hp', 'no_hp', 'hp', 'telepon', 'nomor_telepon' => 'nomor_hp',
             'nik', 'nomor_ktp', 'ktp' => 'nik',
+            'alamat', 'alamat_pegawai', 'alamat_lengkap' => 'alamat',
             default => null,
         };
     }
@@ -214,6 +225,7 @@ class AssetHolderImportService
             'jabatan' => $this->nullableString($data['jabatan'] ?? null),
             'nomor_hp' => $this->nullableString($data['nomor_hp'] ?? null),
             'nik' => $this->nullableString($data['nik'] ?? null),
+            'alamat' => $this->nullableString($data['alamat'] ?? null),
         ];
     }
 
@@ -228,6 +240,7 @@ class AssetHolderImportService
             'jabatan' => ['required', 'string', 'max:150'],
             'nomor_hp' => ['nullable', 'string', 'max:30', 'regex:/^[0-9+\\-\\s]+$/'],
             'nik' => ['nullable', 'digits:16'],
+            'alamat' => ['nullable', 'string', 'max:1000'],
         ]);
 
         return collect($validator->errors()->all())

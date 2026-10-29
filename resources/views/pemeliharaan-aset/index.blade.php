@@ -13,9 +13,15 @@
     use Illuminate\Support\Facades\Storage;
 
     $role = auth()->user()?->role;
-    $canSubmit = in_array($role, ['admin_bidang', 'tim_aset', 'super_admin'], true);
-    $canProcess = in_array($role, ['tim_aset', 'super_admin'], true);
-    $canEditMaintenance = $canProcess;
+    $canSubmit = auth()->user()?->hasPermission('pemeliharaan.create') ?? false;
+    $canVerify = (auth()->user()?->hasPermission('pemeliharaan.verify') ?? false) && $role !== 'admin_bidang';
+    $canStart = (auth()->user()?->hasPermission('pemeliharaan.start') ?? false) && $role !== 'admin_bidang';
+    $canComplete = (auth()->user()?->hasPermission('pemeliharaan.complete') ?? false) && $role !== 'admin_bidang';
+    $canReportUpdate = (auth()->user()?->hasPermission('pemeliharaan.report.update') ?? false) && $role !== 'admin_bidang';
+    $canEditMaintenance = auth()->user()?->hasPermission('pemeliharaan.update') ?? false;
+    $canDownload = auth()->user()?->hasPermission('pemeliharaan.download') ?? false;
+    $canExport = auth()->user()?->hasPermission('pemeliharaan.export') ?? false;
+    $canDeleteMaintenance = $role === 'super_admin';
     $numberStart = ($maintenances->currentPage() - 1) * $maintenances->perPage();
     $selectedPerPage = (int) request('per_page', $maintenances->perPage());
     $conditions = collect([AssetCondition::LightDamage, AssetCondition::MediumDamage, AssetCondition::HeavyDamage])->mapWithKeys(fn ($condition) => [$condition->value => $condition->label()]);
@@ -84,7 +90,9 @@
             @if (request()->hasAny(['search', 'kondisi', 'prioritas', 'status']))
                 <a class="page-action-button inline-flex min-h-[38px] items-center justify-center rounded-[9px] border border-[#dbe3eb] bg-white px-3.5 text-[10px] font-bold text-[#5e7084] no-underline transition hover:border-[#b8c6d6] hover:bg-[#f8fafc]" href="{{ route('pemeliharaan-aset.index') }}">Reset</a>
             @endif
-            <x-export-dropdown dataset="pemeliharaan-aset" />
+            @if ($canExport)
+                <x-export-dropdown dataset="pemeliharaan-aset" />
+            @endif
         </form>
 
         <div class="table-scroll">
@@ -103,6 +111,10 @@
                 </thead>
                 <tbody>
                     @forelse ($maintenances as $index => $maintenance)
+                        @php
+                            $canDeleteRecord = $canDeleteMaintenance
+                                && in_array($maintenance->id, $deletableMaintenanceIds ?? [], true);
+                        @endphp
                         <tr>
                             <td class="number-column">{{ $numberStart + $index + 1 }}</td>
                             <td><span class="code-badge">{{ $maintenance->asset?->kode_internal ?: '-' }}</span></td>
@@ -114,17 +126,17 @@
                             <td class="action-column">
                                 <div class="row-actions">
                                     <button type="button" data-modal-open="detail-maintenance-{{ $maintenance->id }}" title="Detail"><svg viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Zm10 3a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" /></svg></button>
-                                    @if ($canEditMaintenance)
+                                    @if ($canEditMaintenance && $maintenance->status !== AssetMaintenanceStatus::Rejected && ($role !== 'admin_bidang' || $maintenance->pemohon_id === auth()->id()))
                                         <button type="button" data-modal-open="edit-maintenance-{{ $maintenance->id }}" title="Edit Pemeliharaan" aria-label="Edit Pemeliharaan {{ $maintenance->id }}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4L16.5 3.5Z" /></svg></button>
                                     @endif
                                     @if ($maintenance->status === AssetMaintenanceStatus::Completed)
-                                        @if ($maintenance->hasCompleteReportData())
+                                        @if ($maintenance->hasCompleteReportData() && $canDownload)
                                             <a href="{{ route('pemeliharaan-aset.word', $maintenance) }}" title="Download Word Berita Acara"><svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6V3Zm9 0v5h4M9 13h6m-6 4h6" /></svg></a>
-                                        @else
+                                        @elseif (! $maintenance->hasCompleteReportData())
                                             <button type="button" data-modal-open="detail-maintenance-{{ $maintenance->id }}" title="Lengkapi Data Berita Acara"><svg viewBox="0 0 24 24"><path d="M12 3v10m0 4v.01M4 21h16L12 5 4 21Z" /></svg></button>
                                         @endif
                                     @endif
-                                    @if ($canEditMaintenance)
+                                    @if ($canDeleteRecord)
                                         <button class="danger" type="button" data-modal-open="delete-maintenance-{{ $maintenance->id }}" title="Hapus Data" aria-label="Hapus Data Pemeliharaan {{ $maintenance->id }}"><svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6m4-6v6M6 7l1 14h10l1-14M9 7V4h6v3" /></svg></button>
                                     @endif
                                 </div>
@@ -161,7 +173,7 @@
     @foreach ($maintenances as $maintenance)
         @include('pemeliharaan-aset.partials.detail-modal', ['timeline' => $histories[$maintenance->id] ?? []])
         @include('pemeliharaan-aset.partials.edit-modal')
-        @if ($canEditMaintenance)
+        @if ($canDeleteMaintenance && in_array($maintenance->id, $deletableMaintenanceIds ?? [], true))
             @include('pemeliharaan-aset.partials.delete-modal')
         @endif
     @endforeach

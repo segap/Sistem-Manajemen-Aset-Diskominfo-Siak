@@ -4,6 +4,10 @@
 
 @php
     $numberStart = ($categories->currentPage() - 1) * $categories->perPage();
+    $canCreateCategories = auth()->user()?->hasPermission('kategori_aset.create') ?? false;
+    $canUpdateCategories = auth()->user()?->hasPermission('kategori_aset.update') ?? false;
+    $canDeleteCategories = auth()->user()?->hasPermission('kategori_aset.delete') ?? false;
+    $canManageCategories = $canUpdateCategories || $canDeleteCategories;
 @endphp
 
 @section('content')
@@ -14,9 +18,11 @@
             <h1 class="m-0 mb-[3px] text-[clamp(25px,2.5vw,34px)] font-extrabold tracking-[-.035em] text-[#0b2b50]">Kategori Aset</h1>
             <p class="m-0 text-[13px] text-[#66758a]">Atur pengelompokan barang agar data inventaris lebih terstruktur.</p>
         </div>
-        <button class="page-action-button inline-flex min-h-[38px] items-center justify-center gap-2 rounded-[9px] border-0 bg-[#146bb5] px-3.5 text-[10px] font-bold text-white shadow-[0_8px_18px_rgb(20_107_181_/_16%)] transition hover:bg-[#0c568f] max-[580px]:w-full" type="button" data-modal-open="create-category">
-            <span class="text-sm font-normal leading-none">+</span> Tambah Kategori
-        </button>
+        @if ($canCreateCategories)
+            <button class="page-action-button inline-flex min-h-[38px] items-center justify-center gap-2 rounded-[9px] border-0 bg-[#146bb5] px-3.5 text-[10px] font-bold text-white shadow-[0_8px_18px_rgb(20_107_181_/_16%)] transition hover:bg-[#0c568f] max-[580px]:w-full" type="button" data-modal-open="create-category">
+                <span class="text-sm font-normal leading-none">+</span> Tambah Kategori
+            </button>
+        @endif
     </div>
 
     @if (session('success'))
@@ -39,9 +45,11 @@
                     </a>
                 @endif
             </form>
-            <div class="flex flex-wrap items-center gap-3">
-                <x-export-dropdown dataset="kategori-aset" />
-            </div>
+            @if ($exportFormats !== [])
+                <div class="flex flex-wrap items-center gap-3">
+                    <x-export-dropdown dataset="kategori-aset" :formats="$exportFormats" />
+                </div>
+            @endif
         </div>
 
         @if (session('error'))
@@ -57,7 +65,7 @@
                         <th>Nama Kategori</th>
                         <th>Ikon</th>
                         <th>Deskripsi</th>
-                        <th class="action-column">Aksi</th>
+                        @if ($canManageCategories)<th class="action-column">Aksi</th>@endif
                     </tr>
                 </thead>
                 <tbody>
@@ -74,20 +82,26 @@
                                 @endif
                             </td>
                             <td><span class="description-cell">{{ $category->deskripsi ?: 'Belum ada deskripsi' }}</span></td>
-                            <td class="action-column">
-                                <div class="row-actions">
+                            @if ($canManageCategories)
+                                <td class="action-column">
+                                    <div class="row-actions">
+                                    @if ($canUpdateCategories)
                                     <button type="button" data-modal-open="edit-category-{{ $category->id }}" aria-label="Edit {{ $category->nama_kategori }}" title="Edit">
                                         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4L16.5 3.5Z" /></svg>
                                     </button>
+                                    @endif
+                                    @if ($canDeleteCategories)
                                     <button class="danger" type="button" data-modal-open="delete-category-{{ $category->id }}" aria-label="Hapus {{ $category->nama_kategori }}" title="Hapus">
                                         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16m-10 4v6m4-6v6M9 7l1-3h4l1 3m3 0-1 14H7L6 7" /></svg>
                                     </button>
+                                    @endif
                                 </div>
-                            </td>
+                                </td>
+                            @endif
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="6">
+                            <td colspan="{{ $canManageCategories ? 6 : 5 }}">
                                 <div class="table-empty">
                                     <span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7.5 12 3l8 4.5-8 4.5-8-4.5Z" /><path d="M4 12.5 12 17l8-4.5" /><path d="M4 17.5 12 22l8-4.5" /></svg></span>
                                     <strong>Belum ada kategori</strong>
@@ -113,6 +127,7 @@
         </div>
     </section>
 
+    @if ($canCreateCategories)
     <div class="fixed inset-0 z-80 hidden place-items-center overflow-y-auto bg-[rgb(5_22_38_/_48%)] p-6 animate-[modalBackdropIn_.2s_ease-out_both] max-[580px]:p-3" data-modal="create-category" role="presentation">
         <section class="w-[min(620px,100%)] max-h-[calc(100vh-48px)] overflow-y-auto rounded-2xl bg-white shadow-[0_25px_80px_rgb(2_19_34_/_28%)] animate-[modalZoomIn_.24s_cubic-bezier(.2,.8,.2,1)_both]" role="dialog" aria-modal="true" aria-labelledby="create-category-title">
             <header class="flex min-h-[83px] items-center justify-between border-b border-[#edf1f5] px-[22px] py-[17px]">
@@ -139,8 +154,10 @@
             </form>
         </section>
     </div>
+    @endif
 
     @foreach ($categories as $category)
+        @if ($canUpdateCategories)
         <div class="fixed inset-0 z-80 hidden place-items-center overflow-y-auto bg-[rgb(5_22_38_/_48%)] p-6 animate-[modalBackdropIn_.2s_ease-out_both] max-[580px]:p-3" data-modal="edit-category-{{ $category->id }}" role="presentation">
             <section class="w-[min(620px,100%)] max-h-[calc(100vh-48px)] overflow-y-auto rounded-2xl bg-white shadow-[0_25px_80px_rgb(2_19_34_/_28%)] animate-[modalZoomIn_.24s_cubic-bezier(.2,.8,.2,1)_both]" role="dialog" aria-modal="true" aria-labelledby="edit-category-title-{{ $category->id }}">
                 <header class="flex min-h-[83px] items-center justify-between border-b border-[#edf1f5] px-[22px] py-[17px]">
@@ -168,7 +185,9 @@
                 </form>
             </section>
         </div>
+        @endif
 
+        @if ($canDeleteCategories)
         <div class="fixed inset-0 z-80 hidden place-items-center overflow-y-auto bg-[rgb(5_22_38_/_48%)] p-6 animate-[modalBackdropIn_.2s_ease-out_both] max-[580px]:p-3" data-modal="delete-category-{{ $category->id }}" role="presentation">
             <section class="w-[min(410px,100%)] rounded-2xl bg-white p-[27px] text-center shadow-[0_25px_80px_rgb(2_19_34_/_28%)] animate-[modalZoomIn_.24s_cubic-bezier(.2,.8,.2,1)_both]" role="alertdialog" aria-modal="true" aria-labelledby="delete-title-{{ $category->id }}">
                 <span class="mx-auto mb-3.5 grid h-12 w-12 place-items-center rounded-full bg-[#fff0ee] text-[21px] font-extrabold text-[#b4443d]">!</span>
@@ -184,6 +203,7 @@
                 </form>
             </section>
         </div>
+        @endif
     @endforeach
 </main>
 

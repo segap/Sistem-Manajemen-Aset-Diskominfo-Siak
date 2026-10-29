@@ -83,6 +83,9 @@ class AssetHolderController extends Controller
     public function store(StoreAssetHolderRequest $request): RedirectResponse
     {
         $data = $request->safe()->except(['foto', 'dokumen_ktp']);
+        if (! Schema::hasColumn('pemegang_aset', 'alamat')) {
+            unset($data['alamat']);
+        }
         $data['is_active'] = $request->boolean('is_active', true);
 
         $storedPaths = [];
@@ -110,12 +113,15 @@ class AssetHolderController extends Controller
             throw $exception;
         }
 
-        return back()->with('success', 'Pemegang aset berhasil ditambahkan.');
+        return back()->with('success', 'Data pegawai berhasil ditambahkan.');
     }
 
     public function update(UpdateAssetHolderRequest $request, AssetHolder $assetHolder): RedirectResponse
     {
         $data = $request->safe()->except(['foto', 'dokumen_ktp']);
+        if (! Schema::hasColumn('pemegang_aset', 'alamat')) {
+            unset($data['alamat']);
+        }
         $data['is_active'] = $request->boolean('is_active', false);
         $newPaths = [];
         $oldPaths = [];
@@ -151,12 +157,12 @@ class AssetHolderController extends Controller
             }
         }
 
-        return back()->with('success', 'Pemegang aset berhasil diperbarui.');
+        return back()->with('success', 'Data pegawai berhasil diperbarui.');
     }
 
     public function destroy(Request $request, AssetHolder $assetHolder): RedirectResponse
     {
-        abort_unless($this->canManage($request), 403, 'Anda tidak memiliki akses untuk menghapus pemegang aset.');
+        abort_unless($this->canManage($request), 403, 'Anda tidak memiliki akses untuk menghapus data pegawai.');
 
         if (Schema::hasColumn('aset', 'pemegang_aset_id')
             && DB::table('aset')->where('pemegang_aset_id', $assetHolder->id)->exists()) {
@@ -178,7 +184,7 @@ class AssetHolderController extends Controller
             Storage::disk('local')->delete($ktpPath);
         }
 
-        return back()->with('success', 'Pemegang aset berhasil dihapus permanen.');
+        return back()->with('success', 'Data pegawai berhasil dihapus permanen.');
     }
 
     public function downloadKtp(Request $request, AssetHolder $assetHolder): StreamedResponse
@@ -222,9 +228,9 @@ class AssetHolderController extends Controller
     {
         $spreadsheet = new Spreadsheet();
         $sheet = $spreadsheet->getActiveSheet();
-        $sheet->setTitle('Pemegang Aset');
+        $sheet->setTitle('Data Pegawai');
 
-        $headers = ['Nama Pegawai', 'NIP', 'Email', 'Unit Kerja', 'Jabatan', 'Nomor HP', 'NIK'];
+        $headers = ['Nama Pegawai', 'NIP', 'Email', 'Unit Kerja', 'Jabatan', 'Nomor HP', 'NIK', 'Alamat'];
         $notes = [
             'Wajib, maksimal 150 karakter',
             'Opsional, angka, maksimal 30 digit',
@@ -233,6 +239,7 @@ class AssetHolderController extends Controller
             'Wajib, maksimal 150 karakter',
             'Opsional, angka/+/-/spasi',
             'Opsional, tepat 16 digit',
+            'Opsional, maksimal 1000 karakter',
         ];
 
         foreach ($headers as $index => $header) {
@@ -248,13 +255,14 @@ class AssetHolderController extends Controller
         $sheet->setCellValue('E3', 'Pranata Komputer');
         $sheet->setCellValueExplicit('F3', '081234567890', DataType::TYPE_STRING);
         $sheet->setCellValueExplicit('G3', '1401010101010001', DataType::TYPE_STRING);
+        $sheet->setCellValue('H3', 'Jl. Contoh No. 1, Siak');
 
-        $sheet->getStyle('A1:G1')->getFont()->setBold(true);
-        $sheet->getStyle('A1:G1')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('E8F3FF');
-        $sheet->getStyle('A2:G2')->getFont()->setItalic(true)->getColor()->setRGB('66758A');
-        $sheet->getStyle('A3:G3')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('FFF7ED');
+        $sheet->getStyle('A1:H1')->getFont()->setBold(true);
+        $sheet->getStyle('A1:H1')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('E8F3FF');
+        $sheet->getStyle('A2:H2')->getFont()->setItalic(true)->getColor()->setRGB('66758A');
+        $sheet->getStyle('A3:H3')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('FFF7ED');
 
-        foreach (range('A', 'G') as $column) {
+        foreach (range('A', 'H') as $column) {
             $sheet->getColumnDimension($column)->setAutoSize(true);
         }
 
@@ -281,7 +289,7 @@ class AssetHolderController extends Controller
 
     public function importPreview(Request $request, AssetHolderImportService $service): RedirectResponse
     {
-        abort_unless($this->canManage($request), 403, 'Anda tidak memiliki akses import pemegang aset.');
+        abort_unless($this->canManage($request), 403, 'Anda tidak memiliki akses import data pegawai.');
 
         $request->validate([
             'file' => ['required', 'file', 'mimes:xlsx', 'max:5120'],
@@ -312,7 +320,7 @@ class AssetHolderController extends Controller
 
     public function importConfirm(Request $request, AssetHolderImportService $service): RedirectResponse
     {
-        abort_unless($this->canManage($request), 403, 'Anda tidak memiliki akses import pemegang aset.');
+        abort_unless($this->canManage($request), 403, 'Anda tidak memiliki akses import data pegawai.');
 
         $request->validate(['token' => ['required', 'string']]);
 
@@ -333,7 +341,7 @@ class AssetHolderController extends Controller
             $request->session()->put('asset_holder_imports', $imports);
         }
 
-        return back()->with('success', "{$count} data pemegang aset berhasil diimpor.");
+        return back()->with('success', "{$count} data pegawai berhasil diimpor.");
     }
 
     private function canManage(Request $request): bool

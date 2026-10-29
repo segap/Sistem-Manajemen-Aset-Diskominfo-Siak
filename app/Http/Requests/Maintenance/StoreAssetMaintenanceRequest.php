@@ -9,7 +9,7 @@ class StoreAssetMaintenanceRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return in_array($this->user()?->role, ['admin_bidang', 'tim_aset', 'super_admin'], true);
+        return $this->user()?->hasPermission('pemeliharaan.create') ?? false;
     }
 
     public function rules(): array

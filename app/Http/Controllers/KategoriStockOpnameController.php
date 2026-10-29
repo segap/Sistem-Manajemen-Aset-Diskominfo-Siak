@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Enums\UserRole;
 use App\Models\StockOpnameCategory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
@@ -33,14 +32,15 @@ class KategoriStockOpnameController extends Controller
             'categories' => $categories,
             'search' => $search,
             'selectedPerPage' => $perPage,
-            'canManage' => $this->canManage($request),
+            'canCreate' => $request->user()?->hasPermission('kategori_stock_opname.create') ?? false,
+            'canUpdate' => $request->user()?->hasPermission('kategori_stock_opname.update') ?? false,
+            'canDelete' => $request->user()?->hasPermission('kategori_stock_opname.delete') ?? false,
+            'canExport' => $request->user()?->hasPermission('kategori_stock_opname.export') ?? false,
         ]);
     }
 
     public function store(Request $request): RedirectResponse
     {
-        $this->authorizeManage($request);
-
         $data = $this->validatedData($request);
         $this->ensureUniqueName($data['nama_kategori']);
 
@@ -53,8 +53,6 @@ class KategoriStockOpnameController extends Controller
 
     public function update(Request $request, StockOpnameCategory $kategoriStockOpname): RedirectResponse
     {
-        $this->authorizeManage($request);
-
         $data = $this->validatedData($request);
         $this->ensureUniqueName($data['nama_kategori'], $kategoriStockOpname->id);
 
@@ -67,8 +65,6 @@ class KategoriStockOpnameController extends Controller
 
     public function destroy(Request $request, StockOpnameCategory $kategoriStockOpname): RedirectResponse
     {
-        $this->authorizeManage($request);
-
         $itemCount = $kategoriStockOpname->items()->count();
         if ($itemCount > 0) {
             return back()
@@ -111,16 +107,4 @@ class KategoriStockOpnameController extends Controller
         }
     }
 
-    private function authorizeManage(Request $request): void
-    {
-        abort_if(! $this->canManage($request), 403, 'Aksi ini hanya dapat dilakukan oleh Admin.');
-    }
-
-    private function canManage(Request $request): bool
-    {
-        $role = $request->user()?->role;
-        $roleValue = $role instanceof UserRole ? $role->value : $role;
-
-        return in_array($roleValue, [UserRole::Admin->value, UserRole::SuperAdmin->value], true);
-    }
 }

@@ -113,8 +113,8 @@ class RiwayatPersetujuanService
         $rejected = $status === ProcurementProposalStatus::Rejected->value;
         $rejectedStage = $model->tahap_penolakan ?: $histories->where('status', 'ditolak')->last()?->tahap;
 
-        return [
-            $this->step('Pengajuan Dibuat', 'pengajuan', $byStage, true, 'created'),
+        $timeline = [
+            $this->step('Pengajuan Pengadaan Dibuat', 'pengajuan', $byStage, true, 'created'),
             $this->step(
                 $rejected && $rejectedStage === 'verifikasi_tim_aset' ? 'Ditolak Tim Aset' : 'Diverifikasi Tim Aset',
                 'verifikasi_tim_aset',
@@ -132,6 +132,35 @@ class RiwayatPersetujuanService
                 $status === ProcurementProposalStatus::Verified->value ? 'Menunggu Persetujuan Kasubbag' : null,
             ),
         ];
+
+        // Data lama mungkin belum memiliki audit trail. Gunakan hanya field proses
+        // yang benar-benar tersimpan pada usulan sebagai fallback, tanpa membuat
+        // waktu atau pemeriksa baru.
+        if (! $byStage->has('pengajuan') && $model->created_at) {
+            $timeline[0]['actor'] = $model->requester?->name;
+            $timeline[0]['time'] = $model->created_at;
+            $timeline[0]['processed'] = true;
+        }
+
+        if (! $byStage->has('verifikasi_tim_aset') && $model->tanggal_pemeriksaan_tim_aset) {
+            $timeline[1]['actor'] = $model->assetTeamReviewer?->name;
+            $timeline[1]['time'] = $model->tanggal_pemeriksaan_tim_aset;
+            $timeline[1]['note'] = $rejectedStage === 'verifikasi_tim_aset'
+                ? $model->alasan_penolakan
+                : $model->catatan_tim_aset;
+            $timeline[1]['processed'] = true;
+        }
+
+        if (! $byStage->has('persetujuan_kasubbag') && $model->tanggal_pemeriksaan_kasubbag) {
+            $timeline[2]['actor'] = $model->supervisorReviewer?->name;
+            $timeline[2]['time'] = $model->tanggal_pemeriksaan_kasubbag;
+            $timeline[2]['note'] = $rejectedStage === 'kasubbag'
+                ? $model->alasan_penolakan
+                : $model->catatan_kasubbag;
+            $timeline[2]['processed'] = true;
+        }
+
+        return $timeline;
     }
 
     private function procurementSupervisorState(?string $status, ?string $rejectedStage): string

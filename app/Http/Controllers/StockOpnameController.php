@@ -8,7 +8,6 @@ use App\Http\Requests\AddStockOpnameStockRequest;
 use App\Http\Requests\AdjustStockOpnameItemRequest;
 use App\Http\Requests\StoreStockOpnameItemRequest;
 use App\Http\Requests\UpdateStockOpnameItemRequest;
-use App\Http\Requests\VerifyStockOpnameItemRequest;
 use App\Models\KodeBarang;
 use App\Models\Ruangan;
 use App\Models\StockOpnameCategory;
@@ -30,8 +29,6 @@ class StockOpnameController extends Controller
     {
         $perPage = min(max($request->integer('per_page', 10), 1), 100);
         $stockStatus = $request->string('stock_status')->toString();
-        $verification = StockOpnameVerificationStatus::tryFrom($request->string('verification')->toString());
-
         $items = StockOpnameItem::query()
             ->with(['category', 'kodePersediaan', 'kodeBarang', 'requester', 'verifier', 'mutations'])
             ->when($request->filled('search'), function (Builder $query) use ($request): void {
@@ -45,7 +42,6 @@ class StockOpnameController extends Controller
                 });
             })
             ->when($request->filled('category'), fn (Builder $query) => $query->where('stock_opname_category_id', $request->integer('category')))
-            ->when($verification, fn (Builder $query) => $query->where('status_verifikasi', $verification->value))
             ->when($stockStatus === 'rendah', fn (Builder $query) => $query->where('stok', '<', 5))
             ->when($stockStatus === 'tersedia', fn (Builder $query) => $query->where('stok', '>=', 5))
             ->when($stockStatus === 'menipis', fn (Builder $query) => $query->where('stok', '>', 0)->where('stok', '<', 5))
@@ -59,14 +55,12 @@ class StockOpnameController extends Controller
             'categories' => StockOpnameCategory::query()->orderBy('nama_kategori')->get(),
             'kodeBarangOptions' => KodeBarang::query()->orderBy('kode_barang')->limit(500)->get(),
             'ruanganOptions' => Ruangan::query()->orderBy('nama_ruangan')->get(),
-            'statuses' => StockOpnameVerificationStatus::cases(),
             'selectedPerPage' => $perPage,
         ]);
     }
 
     public function store(StoreStockOpnameItemRequest $request): RedirectResponse
     {
-        $this->authorizeAdmin($request);
         $data = $request->validated();
         $kodeBarang = filled($data['kode_barang_id'] ?? null)
             ? KodeBarang::query()->findOrFail($data['kode_barang_id'])
@@ -80,21 +74,19 @@ class StockOpnameController extends Controller
                 'kode_persediaan' => $kodeBarang?->kode_barang ?? $kodeInternal,
                 'kode_internal' => $kodeInternal,
                 'pengusul_id' => $request->user()->id,
-                'status_verifikasi' => StockOpnameVerificationStatus::Submitted,
+                'status_verifikasi' => StockOpnameVerificationStatus::Approved,
                 'is_active' => true,
             ]);
 
             $this->recordOpeningBalance($item, $request->user()?->id, 'Saldo awal saat barang ditambahkan.');
-            $this->recordHistory($item, 'diajukan', null, StockOpnameVerificationStatus::Submitted->value, $request->user()?->id, $item->keterangan);
+            $this->recordHistory($item, 'diajukan', null, StockOpnameVerificationStatus::Approved->value, $request->user()?->id, 'Barang ditambahkan dan stok langsung tersedia.');
         });
 
-        return back()->with('success', 'Barang persediaan berhasil diajukan untuk verifikasi Tim Aset.');
+        return back()->with('success', 'Barang berhasil ditambahkan dan stok langsung tersedia.');
     }
 
     public function update(UpdateStockOpnameItemRequest $request, StockOpnameItem $stockOpnameItem): RedirectResponse
     {
-        $this->authorizeAdmin($request);
-
         $data = $request->validated();
         $kodeBarang = filled($data['kode_barang_id'] ?? null)
             ? KodeBarang::query()->findOrFail($data['kode_barang_id'])
@@ -104,30 +96,24 @@ class StockOpnameController extends Controller
             ...$data,
             'kode_persediaan_id' => null,
             'kode_persediaan' => $kodeBarang?->kode_barang ?? $stockOpnameItem->kode_internal,
-            'status_verifikasi' => StockOpnameVerificationStatus::Submitted,
-            'diverifikasi_oleh' => null,
-            'tanggal_verifikasi' => null,
-            'catatan_verifikasi' => null,
         ]);
 
         $this->recordHistory(
             $stockOpnameItem,
             'diubah',
             null,
-            StockOpnameVerificationStatus::Submitted->value,
+            $stockOpnameItem->status_verifikasi?->value,
             $request->user()?->id,
-            'Data diubah dan diajukan ulang untuk verifikasi.',
+            'Data barang diperbarui.',
             $beforeStock,
             $stockOpnameItem->stok,
         );
 
-        return back()->with('success', 'Barang persediaan berhasil diperbarui dan diajukan ulang.');
+        return back()->with('success', 'Barang persediaan berhasil diperbarui.');
     }
 
     public function addStock(AddStockOpnameStockRequest $request, StockOpnameItem $stockOpnameItem): RedirectResponse
     {
-        $this->authorizeAdmin($request);
-
         DB::transaction(function () use ($request, $stockOpnameItem): void {
             $item = StockOpnameItem::query()->lockForUpdate()->findOrFail($stockOpnameItem->id);
             $before = (int) $item->stok;
@@ -150,33 +136,8 @@ class StockOpnameController extends Controller
         return back()->with('success', 'Stok barang persediaan berhasil ditambahkan.');
     }
 
-    public function verify(VerifyStockOpnameItemRequest $request, StockOpnameItem $stockOpnameItem): RedirectResponse
-    {
-        $this->authorizeTimAset($request);
-
-        if ($stockOpnameItem->status_verifikasi !== StockOpnameVerificationStatus::Submitted) {
-            throw ValidationException::withMessages(['decision' => 'Barang persediaan ini sudah diverifikasi.']);
-        }
-
-        $previous = $stockOpnameItem->status_verifikasi->value;
-        $decision = StockOpnameVerificationStatus::from($request->validated('decision'));
-
-        $stockOpnameItem->update([
-            'status_verifikasi' => $decision,
-            'diverifikasi_oleh' => $request->user()->id,
-            'tanggal_verifikasi' => now(),
-            'catatan_verifikasi' => $request->validated('catatan_verifikasi'),
-        ]);
-
-        $this->recordHistory($stockOpnameItem, 'verifikasi', $previous, $decision->value, $request->user()?->id, $request->validated('catatan_verifikasi'));
-
-        return back()->with('success', 'Verifikasi barang persediaan berhasil diproses.');
-    }
-
     public function adjust(AdjustStockOpnameItemRequest $request, StockOpnameItem $stockOpnameItem): RedirectResponse
     {
-        $this->authorizeAdmin($request);
-
         abort_if($stockOpnameItem->status_verifikasi !== StockOpnameVerificationStatus::Approved, 403, 'Stock opname fisik hanya untuk barang yang sudah disetujui Tim Aset.');
 
         DB::transaction(function () use ($request, $stockOpnameItem): void {
@@ -211,13 +172,15 @@ class StockOpnameController extends Controller
             $hasOperationalHistory = $item->histories()
                 ->whereNotIn('aksi', ['diajukan', 'verifikasi', 'diubah'])
                 ->exists();
-            $hasMutation = $item->mutations()->exists();
+            $hasOperationalMutation = $item->mutations()
+                ->where('jenis', '!=', 'saldo_awal')
+                ->exists();
 
-            if ($hasRequest || $hasOperationalHistory || $hasMutation) {
+            if ($hasRequest || $hasOperationalHistory || $hasOperationalMutation) {
                 $reasons = array_filter([
                     $hasRequest ? 'sudah digunakan pada permintaan barang' : null,
                     $hasOperationalHistory ? 'memiliki riwayat transaksi operasional' : null,
-                    $hasMutation ? 'memiliki mutasi stok' : null,
+                    $hasOperationalMutation ? 'memiliki mutasi stok operasional' : null,
                 ]);
 
                 throw ValidationException::withMessages([
@@ -254,7 +217,6 @@ class StockOpnameController extends Controller
 
     public function importPreview(Request $request)
     {
-        $this->authorizeAdmin($request);
         $data = $this->parseImportFile($request);
 
         return response()->json([
@@ -266,7 +228,6 @@ class StockOpnameController extends Controller
 
     public function import(Request $request): RedirectResponse
     {
-        $this->authorizeAdmin($request);
         $data = $this->parseImportFile($request);
         if ($data['errors'] !== []) {
             throw ValidationException::withMessages(['file' => $data['errors'][0]]);
@@ -281,15 +242,15 @@ class StockOpnameController extends Controller
                     'kode_persediaan_id' => null,
                     'kode_persediaan' => $kodeInternal,
                     'pengusul_id' => $request->user()->id,
-                    'status_verifikasi' => StockOpnameVerificationStatus::Submitted,
+                    'status_verifikasi' => StockOpnameVerificationStatus::Approved,
                     'is_active' => true,
                 ]);
                 $this->recordOpeningBalance($item, $request->user()?->id, 'Saldo awal dari Import Excel Stock Opname.');
-                $this->recordHistory($item, 'diajukan', null, StockOpnameVerificationStatus::Submitted->value, $request->user()?->id, 'Dibuat dari import Excel Stock Opname.');
+                $this->recordHistory($item, 'diajukan', null, StockOpnameVerificationStatus::Approved->value, $request->user()?->id, 'Dibuat dari import Excel dan stok langsung tersedia.');
             }
         });
 
-        return redirect()->route('stock-opname.index')->with('success', count($data['payloads']).' barang persediaan berhasil diimport dan menunggu verifikasi Tim Aset.');
+        return redirect()->route('stock-opname.index')->with('success', count($data['payloads']).' barang persediaan berhasil diimport dan stok langsung tersedia.');
     }
 
     /** @return array{rows: list<array<string, mixed>>, payloads: list<array<string, mixed>>, errors: list<string>} */
@@ -337,11 +298,6 @@ class StockOpnameController extends Controller
     private function authorizeAdmin(Request $request): void
     {
         abort_if(! $this->hasRole($request, [UserRole::Admin]), 403, 'Aksi ini hanya dapat dilakukan oleh Admin.');
-    }
-
-    private function authorizeTimAset(Request $request): void
-    {
-        abort_if(! $this->hasRole($request, [UserRole::TimAset, UserRole::TimAsetPersediaan]), 403, 'Verifikasi hanya dapat dilakukan oleh Tim Aset Persediaan.');
     }
 
     private function hasRole(Request $request, array $roles): bool

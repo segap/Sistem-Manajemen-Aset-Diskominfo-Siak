@@ -22,6 +22,7 @@ class StoreAssetHolderRequest extends FormRequest
             'unit_kerja' => ['required', Rule::enum(WorkUnit::class)],
             'jabatan' => ['required', 'string', 'max:150'],
             'nomor_hp' => ['nullable', 'string', 'max:30', 'regex:/^[0-9+\\-\\s]+$/'],
+            'alamat' => ['nullable', 'string', 'max:1000'],
             'foto' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
             'nik' => ['nullable', 'digits:16'],
             'dokumen_ktp' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'],
@@ -36,6 +37,7 @@ class StoreAssetHolderRequest extends FormRequest
             'email' => filled($this->input('email')) ? strtolower(trim((string) $this->input('email'))) : null,
             'nip' => filled($this->input('nip')) ? trim((string) $this->input('nip')) : null,
             'nomor_hp' => filled($this->input('nomor_hp')) ? trim((string) $this->input('nomor_hp')) : null,
+            'alamat' => filled($this->input('alamat')) ? trim((string) $this->input('alamat')) : null,
             'nik' => filled($this->input('nik')) ? trim((string) $this->input('nik')) : null,
         ]);
     }

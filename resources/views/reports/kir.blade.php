@@ -180,8 +180,8 @@
                 Siak, {{ $generatedAt->translatedFormat('d F Y') }}<br>
                 Penanggung Jawab Ruangan
                 <div class="signature-space"></div>
-                <span class="underline">ADITYA WIDYAWAN PRIMA, S.KOM.,M.SI.</span><br>
-                NIP. {{ $ruangan->penanggungJawab?->nip ?: '19880718 201001 1 008' }}
+                <span class="underline">{{ $ruangan->pemegangAset?->nama_pegawai ?? $ruangan->penanggungJawab?->name ?? 'ADITYA WIDYAWAN PRIMA, S.KOM.,M.SI.' }}</span><br>
+                NIP. {{ $ruangan->pemegangAset?->nip ?? ($ruangan->penanggungJawab?->nip ?: '19880718 201001 1 008') }}
             </td>
         </tr>
     </table>

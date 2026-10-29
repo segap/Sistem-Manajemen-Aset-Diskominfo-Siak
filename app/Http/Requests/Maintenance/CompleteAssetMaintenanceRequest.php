@@ -15,7 +15,8 @@ class CompleteAssetMaintenanceRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return in_array($this->user()?->role, ['tim_aset', 'super_admin'], true);
+        return ($this->user()?->hasPermission('pemeliharaan.complete') ?? false)
+            && $this->user()?->role !== 'admin_bidang';
     }
 
     public function rules(): array

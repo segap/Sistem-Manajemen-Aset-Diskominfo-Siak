@@ -1,19 +1,22 @@
 @php
     use App\Enums\ProcurementProposalStatus;
     use App\Enums\WorkUnit;
-    use Illuminate\Support\Facades\Storage;
-
-    $photoUrl = $proposal->path_foto ? Storage::disk('public')->url($proposal->path_foto) : null;
-    $totalEstimate = (float) $proposal->estimasi_harga_satuan * (int) $proposal->jumlah;
-    $referenceUrl = $proposal->url_referensi_gambar;
-    $catalogUrl = $proposal->url_ekatalog;
-    $isExternalHttpUrl = fn (?string $url): bool => filter_var($url, FILTER_VALIDATE_URL)
-        && in_array(strtolower((string) parse_url($url, PHP_URL_SCHEME)), ['http', 'https'], true);
-    $hasReferenceUrl = $isExternalHttpUrl($referenceUrl);
-    $hasCatalogUrl = $isExternalHttpUrl($catalogUrl);
     $isWaitingAssetTeam = $proposal->status === ProcurementProposalStatus::Submitted;
     $isWaitingSupervisor = $proposal->status === ProcurementProposalStatus::Verified;
-    $requesterWorkUnit = WorkUnit::labelFor($proposal->requester?->work_unit);
+    $requesterWorkUnit = WorkUnit::labelFor($proposal->unit_kerja_snapshot ?: $proposal->requester?->work_unit);
+    $detailRows = $proposal->details->isNotEmpty()
+        ? $proposal->details
+        : collect([(object) [
+            'nomor_urut' => 1,
+            'nama_barang' => $proposal->nama_barang,
+            'spesifikasi' => $proposal->spesifikasi,
+            'jumlah' => $proposal->jumlah,
+            'estimasi_harga_satuan' => $proposal->estimasi_harga_satuan,
+            'link_produk' => $proposal->url_ekatalog ?: $proposal->url_referensi_gambar,
+            'keterangan' => $proposal->alasan_kebutuhan,
+            'responsiblePerson' => $proposal->responsiblePerson,
+        ]]);
+    $totalEstimate = $detailRows->sum(fn ($detail) => (float) $detail->estimasi_harga_satuan * (int) $detail->jumlah);
 @endphp
 
 <div class="fixed inset-0 z-80 hidden place-items-center overflow-y-auto bg-[rgb(5_22_38_/_48%)] p-6 animate-[modalBackdropIn_.2s_ease-out_both] max-[580px]:p-3" data-modal="detail-proposal-{{ $proposal->id }}" role="presentation">
@@ -31,54 +34,62 @@
 
         <div class="grid gap-[17px] p-[22px]">
             <div class="grid overflow-hidden rounded-[12px] border border-[#dfe7f0] md:grid-cols-2">
-                @include('usulan-pengadaan.partials.detail-item', ['label' => 'Barang', 'value' => $proposal->nama_barang])
-                @include('usulan-pengadaan.partials.detail-item', ['label' => 'Jumlah', 'value' => $proposal->jumlah.' unit'])
-                @include('usulan-pengadaan.partials.detail-item', ['label' => 'Estimasi harga satuan', 'value' => $rupiah($proposal->estimasi_harga_satuan)])
+                @include('usulan-pengadaan.partials.detail-item', ['label' => 'Jumlah jenis barang', 'value' => $detailRows->count().' jenis'])
                 @include('usulan-pengadaan.partials.detail-item', ['label' => 'Estimasi total', 'value' => $rupiah($totalEstimate)])
                 @include('usulan-pengadaan.partials.detail-item', ['label' => 'Pengusul', 'value' => $proposal->requester?->name])
                 @include('usulan-pengadaan.partials.detail-item', ['label' => 'Unit Kerja', 'value' => $requesterWorkUnit])
-                @include('usulan-pengadaan.partials.detail-item', ['label' => 'Pengguna barang', 'value' => $proposal->intendedUser?->name])
-                @include('usulan-pengadaan.partials.detail-item', ['label' => 'Penanggung jawab', 'value' => $proposal->responsiblePerson?->name])
-                @include('usulan-pengadaan.partials.detail-item', ['label' => 'Tanggal pengajuan', 'value' => $formatDateTime($proposal->created_at)])
+                @include('usulan-pengadaan.partials.detail-item', ['label' => 'Tahun anggaran', 'value' => $proposal->tahun_anggaran ?: '-'])
+                @include('usulan-pengadaan.partials.detail-item', ['label' => 'Jenis belanja', 'value' => $proposal->jenis_belanja_label])
+                @include('usulan-pengadaan.partials.detail-item', ['label' => 'Tanggal pengajuan', 'value' => $formatDateTime($proposal->tanggal_pengajuan ?: $proposal->created_at)])
             </div>
 
-            <div class="grid gap-4 md:grid-cols-2">
-                <div class="rounded-[12px] border border-[#dfe7f0] bg-white p-4">
-                    <span class="mb-2 block text-[9px] font-bold uppercase tracking-[.08em] text-[#8896a7]">URL referensi gambar</span>
-                    @if ($hasReferenceUrl)
-                        <a class="page-action-button inline-flex min-h-[34px] items-center justify-center gap-1.5 rounded-[8px] border border-[#dbe3eb] bg-white px-3 text-[10px] font-bold text-[#146bb5] no-underline transition hover:border-[#9fc5df] hover:bg-[#f8fafc]" href="{{ $referenceUrl }}" target="_blank" rel="noopener noreferrer">
-                            Lihat Referensi
-                            <svg class="h-3.5 w-3.5 fill-none stroke-current stroke-[2] [stroke-linecap:round] [stroke-linejoin:round]" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 5h5v5M19 5l-8 8M17 13v5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1h5" /></svg>
-                        </a>
-                    @else
-                        <p class="m-0 text-[11px] text-[#6e7d91]">Tidak tersedia</p>
-                    @endif
-                </div>
-                <div class="rounded-[12px] border border-[#dfe7f0] bg-white p-4">
-                    <span class="mb-2 block text-[9px] font-bold uppercase tracking-[.08em] text-[#8896a7]">URL e-katalog</span>
-                    @if ($hasCatalogUrl)
-                        <a class="page-action-button inline-flex min-h-[34px] items-center justify-center gap-1.5 rounded-[8px] border border-[#dbe3eb] bg-white px-3 text-[10px] font-bold text-[#146bb5] no-underline transition hover:border-[#9fc5df] hover:bg-[#f8fafc]" href="{{ $catalogUrl }}" target="_blank" rel="noopener noreferrer">
-                            Buka E-Katalog
-                            <svg class="h-3.5 w-3.5 fill-none stroke-current stroke-[2] [stroke-linecap:round] [stroke-linejoin:round]" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 5h5v5M19 5l-8 8M17 13v5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1h5" /></svg>
-                        </a>
-                    @else
-                        <p class="m-0 text-[11px] text-[#6e7d91]">Tidak tersedia</p>
-                    @endif
-                </div>
-            </div>
+            @if ($proposal->keterangan_umum)
+                @include('usulan-pengadaan.partials.detail-note', ['title' => 'Keterangan umum', 'body' => $proposal->keterangan_umum])
+            @endif
 
-            @include('usulan-pengadaan.partials.detail-note', ['title' => 'Spesifikasi', 'body' => $proposal->spesifikasi])
-            @include('usulan-pengadaan.partials.detail-note', ['title' => 'Justifikasi kebutuhan', 'body' => $proposal->alasan_kebutuhan])
-
-            <div class="rounded-[12px] border border-[#dfe7f0] bg-white p-4">
-                <span class="mb-3 block text-[11px] font-extrabold text-[#405267]">Foto barang</span>
-                @if ($photoUrl)
-                    <a href="{{ $photoUrl }}" target="_blank" rel="noopener noreferrer" class="block overflow-hidden rounded-[12px] border border-[#dfe7f0] bg-[#f7fafc]">
-                        <img class="max-h-[320px] w-full object-contain" src="{{ $photoUrl }}" alt="Foto {{ $proposal->nama_barang }}">
-                    </a>
-                @else
-                    <div class="grid min-h-[130px] place-items-center rounded-[12px] bg-[#f4f7fa] text-[11px] font-semibold text-[#7d8ba0]">Foto belum tersedia.</div>
-                @endif
+            <div class="overflow-hidden rounded-[12px] border border-[#dfe7f0] bg-white">
+                <div class="border-b border-[#e8eef4] px-4 py-3 text-[12px] font-extrabold text-[#0b2b50]">Rincian Barang</div>
+                <div class="overflow-x-auto">
+                    <table class="data-table min-w-[780px]">
+                        <thead>
+                            <tr>
+                                <th class="number-column">No</th>
+                                <th class="min-w-[230px]">Barang / Spesifikasi</th>
+                                <th class="text-center">Jumlah</th>
+                                <th class="text-right">Harga Satuan</th>
+                                <th class="text-center">Referensi</th>
+                                <th>Penanggung Jawab</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach ($detailRows as $detail)
+                                <tr>
+                                    <td class="number-column">{{ $detail->nomor_urut }}</td>
+                                    <td class="align-middle">
+                                        <strong class="block text-[#2c4159]">{{ $detail->nama_barang }}</strong>
+                                        <span class="mt-1 block whitespace-pre-line text-[#66758a]">{{ $detail->spesifikasi }}</span>
+                                        @if ($detail->keterangan)
+                                            <span class="mt-1 block whitespace-pre-line text-[#66758a]">{{ $detail->keterangan }}</span>
+                                        @endif
+                                    </td>
+                                    <td class="text-center align-middle">{{ $detail->jumlah }}</td>
+                                    <td class="text-right align-middle whitespace-nowrap">{{ $rupiah($detail->estimasi_harga_satuan) }}</td>
+                                    <td class="text-center align-middle">
+                                        @if ($detail->link_produk)
+                                            <a class="inline-flex items-center justify-center gap-1 font-bold text-[#146bb5] no-underline hover:text-[#0c568f] hover:underline" href="{{ $detail->link_produk }}" target="_blank" rel="noopener noreferrer">
+                                                Buka Link
+                                                <svg class="h-3 w-3 fill-none stroke-current stroke-[2]" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 5h5v5M19 5l-8 8M19 14v4a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h4" /></svg>
+                                            </a>
+                                        @else
+                                            -
+                                        @endif
+                                    </td>
+                                    <td class="align-middle">{{ $detail->responsiblePerson?->name ?: '-' }}</td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
             </div>
 
             <div class="grid overflow-hidden rounded-[12px] border border-[#dfe7f0] md:grid-cols-2">
@@ -130,6 +141,19 @@
                     </div>
                 </form>
             @endif
+
+            <article class="rounded-[14px] border border-[#e3e9f0] p-4">
+                <h3 class="m-0 mb-3 text-[13px] font-extrabold text-[#0b2b50]">Riwayat Aktivitas</h3>
+                <div class="grid gap-2">
+                    @foreach ($timeline as $step)
+                        <div class="rounded-[12px] bg-[#f7f9fc] p-3 text-[11px]">
+                            <strong class="block text-[#0b2b50]">{{ $step['state'] === 'rejected' ? '✕' : ($step['state'] === 'waiting' ? '⏳' : '✓') }} {{ $step['label'] }}</strong>
+                            <small class="text-[#718095]">{{ $step['actor'] ?: '-' }}{{ $step['time'] ? ' • '.$step['time']->translatedFormat('d M Y H:i') : '' }}</small>
+                            @if ($step['note'])<p class="m-0 mt-1 text-[#516176]">{{ $step['note'] }}</p>@endif
+                        </div>
+                    @endforeach
+                </div>
+            </article>
 
             <footer class="mt-[5px] flex justify-end border-t border-[#edf1f5] pt-[18px]">
                 <button class="page-action-button inline-flex min-h-[38px] items-center justify-center rounded-[9px] border border-[#dbe3eb] bg-white px-3.5 text-[10px] font-bold text-[#5e7084] transition hover:border-[#b8c6d6] hover:bg-[#f8fafc]" type="button" data-modal-close>Tutup</button>

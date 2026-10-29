@@ -1,6 +1,4 @@
 @php
-    use App\Enums\StockOpnameVerificationStatus;
-
     $number = fn ($value) => number_format((int) $value, 0, ',', '.');
     $stockTotal = fn ($item) => max(
         (int) $item->stok,
@@ -9,15 +7,6 @@
     );
     $stockStatusLabel = fn ($stock) => $stock === 0 ? 'Stok Habis' : ($stock < 5 ? 'Stok Menipis' : 'Tersedia');
     $stockStatusClass = fn ($stock) => $stock === 0 ? 'status-ditolak' : ($stock < 5 ? 'status-diajukan' : 'status-disetujui');
-    $verificationClass = fn ($status) => match ($status instanceof StockOpnameVerificationStatus ? $status->value : $status) {
-        StockOpnameVerificationStatus::Approved->value => 'status-disetujui',
-        StockOpnameVerificationStatus::Rejected->value => 'status-ditolak',
-        default => 'status-diajukan',
-    };
-    $verificationLabel = fn ($status) => match ($status instanceof StockOpnameVerificationStatus ? $status : StockOpnameVerificationStatus::tryFrom((string) $status)) {
-        StockOpnameVerificationStatus::Approved => 'Disetujui',
-        default => $status instanceof StockOpnameVerificationStatus ? $status->label() : (string) $status,
-    };
 @endphp
 
 <section class="mt-5 overflow-hidden rounded-[14px] border border-slate-200 bg-white shadow-[0_8px_25px_rgb(31_62_91_/_4%)]">
@@ -44,7 +33,6 @@
                     <th>Satuan</th>
                     <th>Stok</th>
                     <th>Status Stok</th>
-                    <th>Verifikasi</th>
                     <th>Lokasi</th>
                 </tr>
             </thead>
@@ -65,12 +53,11 @@
                             <small class="cell-subtitle">dari {{ $number($stockTotal($item)) }} tersedia</small>
                         </td>
                         <td><span class="loan-status {{ $stockStatusClass($item->stok) }}">{{ $stockStatusLabel($item->stok) }}</span></td>
-                        <td><span class="loan-status {{ $verificationClass($item->status_verifikasi) }}">{{ $verificationLabel($item->status_verifikasi) }}</span></td>
                         <td>{{ $item->lokasi_penyimpanan ?: '-' }}</td>
                     </tr>
                 @empty
                     <tr>
-                        <td colspan="10">
+                        <td colspan="9">
                             <div class="table-empty">
                                 <span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 10h16M4 14h10M4 18h8" /></svg></span>
                                 <strong>Barang persediaan belum tersedia</strong>

@@ -7,6 +7,7 @@ use App\Enums\StockOpnameVerificationStatus;
 use App\Enums\UserRole;
 use App\Http\Requests\StorePermintaanPersediaanRequest;
 use App\Http\Requests\VerifyPermintaanPersediaanRequest;
+use App\Models\AssetHolder;
 use App\Models\PermintaanPersediaan;
 use App\Models\StockOpnameItem;
 use Illuminate\Database\Eloquent\Builder;
@@ -25,7 +26,7 @@ class PermintaanPersediaanController extends Controller
         $status = PermintaanPersediaanStatus::tryFrom($request->string('status')->toString());
 
         $requests = PermintaanPersediaan::query()
-            ->with(['pemohon', 'verifier', 'handoverBy', 'details.persediaan.category'])
+            ->with(['pemohon', 'pemegangAset', 'dicatatOleh', 'verifier', 'handoverBy', 'details.persediaan.category'])
             ->when($role === UserRole::AdminBidang->value, fn (Builder $query) => $query->where('pemohon_id', $request->user()->id))
             ->when($status, fn (Builder $query) => $query->where('status', $status->value))
             ->when($request->filled('search'), function (Builder $query) use ($request): void {
@@ -33,6 +34,8 @@ class PermintaanPersediaanController extends Controller
                 $query->where(function (Builder $query) use ($search): void {
                     $query->where('nomor_permintaan', 'like', "%{$search}%")
                         ->orWhere('keperluan', 'like', "%{$search}%")
+                        ->orWhere('nama_pemohon_snapshot', 'like', "%{$search}%")
+                        ->orWhere('nip_pemohon_snapshot', 'like', "%{$search}%")
                         ->orWhereHas('pemohon', fn (Builder $query) => $query->where('name', 'like', "%{$search}%")->orWhere('nip', 'like', "%{$search}%"))
                         ->orWhereHas('details', fn (Builder $query) => $query
                             ->where('nama_barang_snapshot', 'like', "%{$search}%")
@@ -48,13 +51,17 @@ class PermintaanPersediaanController extends Controller
             'stockItems' => $this->eligibleStockItems(),
             'statuses' => PermintaanPersediaanStatus::cases(),
             'selectedPerPage' => $perPage,
+            'activeEmployees' => $request->user()?->hasPermission('permintaan.create')
+                ? AssetHolder::query()
+                    ->where('is_active', true)
+                    ->orderBy('nama_pegawai')
+                    ->get(['id', 'nama_pegawai', 'unit_kerja'])
+                : collect(),
         ]);
     }
 
     public function store(StorePermintaanPersediaanRequest $request): RedirectResponse
     {
-        $this->authorizeRole($request, [UserRole::AdminBidang]);
-
         $data = $request->validated();
         $items = collect($data['items'])
             ->filter(fn (array $item) => filled($item['persediaan_id'] ?? null) && filled($item['jumlah_diminta'] ?? null))
@@ -69,6 +76,24 @@ class PermintaanPersediaanController extends Controller
         }
 
         DB::transaction(function () use ($request, $data, $items): void {
+            $user = $request->user();
+            $isOtherEmployeeRequest = $data['asal_permintaan'] === 'pegawai_lain';
+            $employee = null;
+
+            if ($isOtherEmployeeRequest) {
+                $employee = AssetHolder::query()
+                    ->whereKey($data['pemegang_aset_id'])
+                    ->where('is_active', true)
+                    ->lockForUpdate()
+                    ->first();
+
+                if (! $employee) {
+                    throw ValidationException::withMessages([
+                        'pemegang_aset_id' => 'Pegawai tidak ditemukan atau sudah tidak aktif.',
+                    ]);
+                }
+            }
+
             $stocks = StockOpnameItem::query()
                 ->whereIn('id', $items->pluck('persediaan_id'))
                 ->lockForUpdate()
@@ -76,7 +101,13 @@ class PermintaanPersediaanController extends Controller
                 ->keyBy('id');
 
             $permintaan = PermintaanPersediaan::query()->create([
-                'pemohon_id' => $request->user()->id,
+                'pemohon_id' => $user->id,
+                'asal_permintaan' => $data['asal_permintaan'],
+                'pemegang_aset_id' => $employee?->id,
+                'dicatat_oleh' => $user->id,
+                'nama_pemohon_snapshot' => $employee?->nama_pegawai ?? $user->name,
+                'nip_pemohon_snapshot' => $employee?->nip ?? $user->nip,
+                'unit_kerja_snapshot' => $employee?->unit_kerja ?? $user->work_unit,
                 'tanggal_permintaan' => now(),
                 'keperluan' => $data['keperluan'] ?? '-',
                 'status' => PermintaanPersediaanStatus::Submitted,
@@ -108,16 +139,18 @@ class PermintaanPersediaanController extends Controller
 
     public function verify(VerifyPermintaanPersediaanRequest $request, PermintaanPersediaan $permintaanPersediaan): RedirectResponse
     {
-        $this->authorizeRole($request, [UserRole::TimAsetPersediaan, 'tim_aset_persediaan']);
-
-        abort_if($permintaanPersediaan->status !== PermintaanPersediaanStatus::Submitted, 403, 'Permintaan ini sudah diproses.');
-
         $data = $request->validated();
         $decision = PermintaanPersediaanStatus::from($data['decision']);
 
         DB::transaction(function () use ($request, $permintaanPersediaan, $data, $decision): void {
             $permintaan = PermintaanPersediaan::query()->lockForUpdate()->findOrFail($permintaanPersediaan->id);
-            $permintaan->load('details.persediaan');
+            if ($permintaan->status !== PermintaanPersediaanStatus::Submitted) {
+                throw ValidationException::withMessages([
+                    'permintaan' => 'Permintaan ini sudah diproses dan tidak dapat diverifikasi kembali.',
+                ]);
+            }
+
+            $permintaan->load('details');
 
             if ($decision === PermintaanPersediaanStatus::Rejected) {
                 $permintaan->update([
@@ -133,6 +166,8 @@ class PermintaanPersediaanController extends Controller
             foreach ($permintaan->details as $detail) {
                 $approved = (int) ($data['items'][$detail->id]['jumlah_disetujui'] ?? $detail->jumlah_diminta);
                 $stock = StockOpnameItem::query()->lockForUpdate()->findOrFail($detail->persediaan_id);
+
+                $this->validateEligibleStock($stock, "items.{$detail->id}.jumlah_disetujui");
 
                 if ($approved < 1 || $approved > $detail->jumlah_diminta || $approved > $stock->stok) {
                     throw ValidationException::withMessages(["items.{$detail->id}.jumlah_disetujui" => 'Jumlah disetujui tidak valid atau melebihi stok tersedia.']);
@@ -154,16 +189,19 @@ class PermintaanPersediaanController extends Controller
 
     public function handover(Request $request, PermintaanPersediaan $permintaanPersediaan): RedirectResponse
     {
-        $this->authorizeRole($request, [UserRole::TimAsetPersediaan, 'tim_aset_persediaan']);
-
-        abort_if($permintaanPersediaan->status !== PermintaanPersediaanStatus::Approved, 403, 'Permintaan belum disetujui untuk diserahkan.');
-
         DB::transaction(function () use ($request, $permintaanPersediaan): void {
             $permintaan = PermintaanPersediaan::query()->lockForUpdate()->findOrFail($permintaanPersediaan->id);
+            if ($permintaan->status !== PermintaanPersediaanStatus::Approved) {
+                throw ValidationException::withMessages([
+                    'permintaan' => 'Permintaan ini tidak dapat diserahkan karena sudah diproses atau belum disetujui.',
+                ]);
+            }
+
             $permintaan->load('details');
 
             foreach ($permintaan->details as $detail) {
                 $stock = StockOpnameItem::query()->lockForUpdate()->findOrFail($detail->persediaan_id);
+                $this->validateEligibleStock($stock, 'stok');
                 $qty = (int) ($detail->jumlah_disetujui ?? 0);
 
                 if ($qty < 1 || $qty > $stock->stok) {
@@ -218,19 +256,6 @@ class PermintaanPersediaanController extends Controller
             || $stock->stok < 1) {
             throw ValidationException::withMessages([$field => 'Barang persediaan tidak tersedia atau belum diverifikasi.']);
         }
-    }
-
-    private function authorizeRole(Request $request, array $roles): void
-    {
-        $role = $this->roleValue($request->user()?->role);
-
-        if ($role === UserRole::SuperAdmin->value) {
-            return;
-        }
-
-        $allowedRoles = array_map(fn (UserRole|string $role): string => $role instanceof UserRole ? $role->value : $role, $roles);
-
-        abort_if(! in_array($role, $allowedRoles, true), 403, 'Anda tidak memiliki akses ke fitur ini.');
     }
 
     private function roleValue(mixed $role): ?string

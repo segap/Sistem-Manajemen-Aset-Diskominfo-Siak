@@ -23,9 +23,31 @@
                         <span>Bulan</span>
                         <select class="h-[42px] w-full rounded-[9px] border border-[#dce4ec] bg-white px-3 text-[10px] font-semibold text-[#34465a] outline-0 transition focus:border-[#6fa9cf] focus:shadow-[0_0_0_3px_rgb(20_107_181_/_8%)]" name="periode" data-report-document-period data-occupied-periods='@json($occupiedPeriodsByYear ?? [])'>
                             @foreach ($months as $month => $monthName)
-                                @php($periodValue = 'bulan_'.$month)
-                                @php($isOccupied = in_array($periodValue, $occupiedPeriods ?? [], true))
+                                @php
+                                    $periodValue = 'bulan_'.$month;
+                                    $isOccupied = in_array($periodValue, $occupiedPeriods ?? [], true);
+                                @endphp
                                 <option value="{{ $periodValue }}" data-period-label="{{ $monthName }}" @disabled($isOccupied)>{{ $monthName }}{{ $isOccupied ? ' — sudah memiliki dokumen' : '' }}</option>
+                            @endforeach
+                        </select>
+                    </label>
+                </div>
+            @elseif (($selectableRkbmdPeriod ?? false) === true)
+                <div class="grid grid-cols-2 gap-3 max-[460px]:grid-cols-1">
+                    <label class="grid gap-[7px] text-[11px] font-bold text-[#405267]">
+                        <span>Tahun</span>
+                        <select class="h-[42px] w-full rounded-[9px] border border-[#dce4ec] bg-white px-3 text-[10px] font-semibold text-[#34465a] outline-0 transition focus:border-[#6fa9cf] focus:shadow-[0_0_0_3px_rgb(20_107_181_/_8%)]" name="tahun">
+                            @foreach ($yearOptions as $option)
+                                <option value="{{ $option }}" @selected($year === $option)>{{ $option }}</option>
+                            @endforeach
+                        </select>
+                    </label>
+                    <label class="grid gap-[7px] text-[11px] font-bold text-[#405267]">
+                        <span>Jenis APBD</span>
+                        <select class="h-[42px] w-full rounded-[9px] border border-[#dce4ec] bg-white px-3 text-[10px] font-semibold text-[#34465a] outline-0 transition focus:border-[#6fa9cf] focus:shadow-[0_0_0_3px_rgb(20_107_181_/_8%)]" name="periode" required>
+                            <option value="" disabled selected>-- Pilih Jenis APBD --</option>
+                            @foreach ($periodLabels ?? [] as $periodValue => $periodName)
+                                <option value="{{ $periodValue }}">{{ $periodName }}</option>
                             @endforeach
                         </select>
                     </label>

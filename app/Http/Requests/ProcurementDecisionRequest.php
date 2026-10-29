@@ -14,6 +14,10 @@ class ProcurementDecisionRequest extends FormRequest
      */
     public function authorize(): bool
     {
+        if ($this->routeIs('web.usulan-pengadaan.keputusan-tim-aset')) {
+            return $this->user()?->hasPermission('usulan_pengadaan.verify') ?? false;
+        }
+
         return true;
     }
 

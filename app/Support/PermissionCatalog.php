@@ -18,7 +18,7 @@ final class PermissionCatalog
         return [
             ...self::module('dashboard', 'Dashboard', ['view']),
             ...self::module('aset', 'Master Barang', ['view', 'create', 'update', 'delete', 'import', 'condition.update', 'verify', 'export']),
-            ...self::module('kategori_aset', 'Kategori Aset', ['view', 'create', 'update', 'delete', 'export']),
+            ...self::module('kategori_aset', 'Kategori Aset', ['view', 'create', 'update', 'delete', 'export', 'export.excel', 'export.pdf']),
             ...self::module('kodefikasi', 'Kodefikasi', ['view', 'create', 'update', 'delete', 'import', 'export']),
             ...self::module('kodefikasi_internal', 'Kodefikasi Internal', ['view', 'generate', 'bulk_generate', 'update', 'reset', 'export']),
             ...self::module('ruangan', 'Manajemen Ruangan', ['view', 'create', 'update', 'delete', 'export']),
@@ -31,6 +31,7 @@ final class PermissionCatalog
             ...self::module('persetujuan', 'Persetujuan', ['view', 'delete', 'export']),
             ...self::module('usulan_pengadaan', 'Usulan Pengadaan', ['view', 'create', 'verify', 'approve', 'export']),
             ...self::module('pengadaan', 'Pengadaan Barang', ['view', 'create', 'receive', 'verify', 'export']),
+            ['kode' => 'pengadaan.update', 'nama' => 'Edit Pengadaan', 'grup' => 'Pengadaan Barang'],
             ...self::module('penghapusan', 'Penghapusan Aset', ['view', 'create', 'approve', 'download', 'export']),
             ...self::module('laporan_aset', 'Laporan Aset', ['view', 'export']),
             ...self::reportModule('laporan_rekonsiliasi_bulanan', 'Laporan Rekonsiliasi Bulanan'),
@@ -38,13 +39,14 @@ final class PermissionCatalog
             ...self::reportModule('laporan_tahunan', 'Laporan Tahunan'),
             ...self::reportModule('laporan_aset_unaudited', 'Laporan Aset Unaudited'),
             ...self::reportModule('laporan_aset_audited', 'Laporan Aset Audited'),
-            ...self::module('berita_acara_bmd', 'Berita Acara BMD', ['view', 'upload', 'complete', 'delete', 'download']),
+            ...self::reportModule('laporan_rkbmd', 'Laporan RKBMD'),
+            ...self::module('berita_acara_bmd', 'Berita Acara BMD', ['view', 'upload', 'complete', 'delete', 'download', 'export']),
             ...self::reportModule('laporan_persediaan_bulanan', 'Laporan Persediaan Bulanan'),
             ...self::reportModule('laporan_persediaan_semester_1', 'Laporan Persediaan Semester 1'),
             ...self::reportModule('laporan_persediaan_tahunan', 'Laporan Persediaan Tahunan'),
             ...self::module('users', 'Data User', ['view', 'create', 'update', 'delete', 'password.reset', 'export']),
             ...self::module('roles', 'Manajemen Role', ['view', 'create', 'update', 'delete', 'export']),
-            ...self::module('pemegang_aset', 'Pemegang Aset', ['view', 'create', 'update', 'delete', 'import', 'template.download', 'ktp.download', 'print', 'pdf']),
+            ...self::module('pemegang_aset', 'Data Pegawai', ['view', 'create', 'update', 'delete', 'import', 'template.download', 'ktp.download', 'print', 'pdf']),
         ];
     }
 
@@ -86,7 +88,7 @@ final class PermissionCatalog
                 self::all('pemeliharaan', ['view', 'download', 'export']),
                 self::all('persetujuan', ['view', 'export']),
                 self::all('usulan_pengadaan', ['view', 'export']),
-                self::all('pengadaan', ['view', 'create', 'receive', 'export']),
+                self::all('pengadaan', ['view', 'create', 'update', 'receive', 'export']),
                 self::all('penghapusan', ['view', 'download', 'export']),
                 self::all('laporan_aset', ['view', 'export']),
                 $assetReports,
@@ -121,7 +123,7 @@ final class PermissionCatalog
                 self::all('peminjaman', ['view', 'verify', 'handover', 'return', 'export']),
                 self::all('pemeliharaan', ['view', 'create', 'verify', 'update', 'delete', 'start', 'complete', 'report.update', 'download', 'export']),
                 self::all('usulan_pengadaan', ['view', 'verify', 'export']),
-                self::all('pengadaan', ['view', 'create', 'receive', 'verify', 'export']),
+                self::all('pengadaan', ['view', 'create', 'update', 'receive', 'verify', 'export']),
                 self::all('penghapusan', ['view', 'create', 'download', 'export']),
                 $assetReports,
                 self::all('pemegang_aset', ['view', 'create', 'update', 'delete', 'import', 'template.download', 'ktp.download', 'print', 'pdf']),
@@ -150,7 +152,7 @@ final class PermissionCatalog
     /** @return list<array{kode: string, nama: string, grup: string}> */
     private static function reportModule(string $module, string $group): array
     {
-        return self::module($module, $group, ['view', 'upload', 'delete', 'download']);
+        return self::module($module, $group, ['view', 'upload', 'delete', 'download', 'export']);
     }
 
     /** @param list<string> $actions @return list<string> */

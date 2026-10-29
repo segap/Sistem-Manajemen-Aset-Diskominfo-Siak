@@ -16,14 +16,10 @@
                 @include('peminjaman.partials.detail-item', ['label' => 'Satuan', 'value' => $item->satuan])
                 @include('peminjaman.partials.detail-item', ['label' => 'Stok', 'value' => $item->stok.' '.$item->satuan])
                 @include('peminjaman.partials.detail-item', ['label' => 'Lokasi', 'value' => $item->lokasi_penyimpanan ?: '-'])
-                @include('peminjaman.partials.detail-item', ['label' => 'Verifikasi', 'value' => $item->status_verifikasi->label()])
-                @include('peminjaman.partials.detail-item', ['label' => 'Diajukan oleh', 'value' => $item->requester?->name ?: '-'])
-                @include('peminjaman.partials.detail-item', ['label' => 'Diverifikasi oleh', 'value' => $item->verifier?->name ?: '-'])
+                @include('peminjaman.partials.detail-item', ['label' => 'Ditambahkan oleh', 'value' => $item->requester?->name ?: '-'])
+                @include('peminjaman.partials.detail-item', ['label' => 'Tanggal penambahan', 'value' => $formatDateTime($item->created_at)])
             </div>
             @include('peminjaman.partials.detail-note', ['title' => 'Keterangan', 'body' => $item->keterangan ?: 'Tidak ada keterangan.'])
-            @if ($item->catatan_verifikasi)
-                @include('peminjaman.partials.detail-note', ['title' => 'Catatan verifikasi', 'body' => $item->catatan_verifikasi])
-            @endif
             <h3 class="m-0 text-[11px] font-extrabold text-[#0b2b50]">Hasil Stock Opname Fisik</h3>
             @php
                 $physicalChecks = $item->histories()
@@ -107,7 +103,7 @@
                     @php
                         $historyStatus = $history->status_sesudah ? StockOpnameVerificationStatus::tryFrom($history->status_sesudah) : null;
                         $historyTitle = $history->aksi === 'verifikasi' && $historyStatus
-                            ? $historyStatus->label()
+                            ? 'Verifikasi lama: '.$historyStatus->label()
                             : str_replace('_', ' ', ucfirst($history->aksi));
                     @endphp
                     <div class="rounded-[11px] bg-[#f7f9fc] p-3 text-[11px] text-[#60708a]">

@@ -6,9 +6,10 @@
     use App\Enums\UserRole;
 
     $role = auth()->user()?->role;
-    $canApproveLoan = in_array($role, [UserRole::TimAset->value, UserRole::KasubbagUmumPerencanaan->value], true);
-    $canHandOverLoan = $role === UserRole::TimAset->value;
-    $canReturnLoan = $role === UserRole::TimAset->value;
+    $canVerifyLoan = auth()->user()?->hasPermission('peminjaman.verify') ?? false;
+    $canApproveLoan = $role === UserRole::KasubbagUmumPerencanaan->value;
+    $canHandOverLoan = auth()->user()?->hasPermission('peminjaman.handover') ?? false;
+    $canReturnLoan = auth()->user()?->hasPermission('peminjaman.return') ?? false;
     $conditionOptions = collect($conditions)->mapWithKeys(fn ($condition) => [$condition->value => $condition->label()]);
     $statusClass = fn ($status) => match ($status instanceof \App\Enums\LoanStatus ? $status->value : $status) {
         'diajukan' => 'status-diajukan',
@@ -26,7 +27,7 @@
 @section('content')
 <main class="mx-auto w-full max-w-[980px] px-[30px] pt-5 pb-[30px] max-[820px]:px-[18px] max-[820px]:py-4">
     <a class="mb-[15px] block w-max text-[10px] font-bold text-[#146bb5] no-underline transition hover:text-[#0b4f88]" href="{{ route('web.peminjaman.index') }}">← Kembali ke peminjaman</a>
-    @include('peminjaman.partials.detail-modal', compact('loan', 'canApproveLoan', 'canHandOverLoan', 'canReturnLoan', 'conditionOptions', 'statusClass', 'formatDate', 'formatDateTime'))
+    @include('peminjaman.partials.detail-modal', compact('loan', 'canVerifyLoan', 'canApproveLoan', 'canHandOverLoan', 'canReturnLoan', 'conditionOptions', 'statusClass', 'formatDate', 'formatDateTime'))
     <div class="rounded-[14px] border border-slate-200 bg-white p-8 text-center shadow-[0_8px_25px_rgb(31_62_91_/_4%)]">
         <h1 class="m-0 mb-3 text-[clamp(25px,2.5vw,34px)] font-extrabold tracking-[-.035em] text-[#0b2b50]">Detail Peminjaman #{{ $loan->id }}</h1>
         <p class="m-0 mb-5 text-[13px] text-[#66758a]">Detail utama tersedia dalam modal agar konsisten dengan halaman daftar.</p>

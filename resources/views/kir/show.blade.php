@@ -3,8 +3,13 @@
 @section('title', 'Detail KIR - SIMIVA')
 
 @php
-    $canManageKir = in_array(auth()->user()?->role, ['admin', 'super_admin'], true);
-    $canExportKir = auth()->user()?->hasPermission('kir.export') ?? false;
+    $canCreateKir = auth()->user()?->hasPermission('kir.create') ?? false;
+    $canUpdateKir = auth()->user()?->hasPermission('kir.update') ?? false;
+    $canDeleteKir = auth()->user()?->hasPermission('kir.delete') ?? false;
+    $canImportKir = auth()->user()?->hasPermission('kir.import') ?? false;
+    $canDownloadTemplateKir = auth()->user()?->hasPermission('kir.template.download') ?? false;
+    $canDownloadKir = auth()->user()?->hasPermission('kir.download') ?? false;
+    $canManageKir = $canUpdateKir || $canDeleteKir;
     $numberStart = ($details->currentPage() - 1) * $details->perPage();
     $selectedPerPage = (int) request('per_page', $details->perPage());
     $openModal = old('_modal');
@@ -18,18 +23,15 @@
             <h1 class="m-0 mb-[3px] text-[clamp(25px,2.5vw,34px)] font-extrabold tracking-[-.035em] text-[#0b2b50]">KIR {{ $ruangan->nama_ruangan }}</h1>
             <p class="m-0 text-[13px] text-[#66758a]">{{ $ruangan->kode_ruangan }} · {{ $kir->kode_lokasi ?: 'Kode lokasi belum diisi' }}</p>
         </div>
-        @if ($canManageKir)
+        @if ($canDownloadKir || $canImportKir)
             <div class="flex flex-wrap justify-end gap-2 max-[680px]:grid max-[680px]:grid-cols-2">
-                @if ($canExportKir)
+                @if ($canDownloadKir)
                     <a class="page-action-button inline-flex min-h-[38px] items-center justify-center rounded-[9px] border border-[#dbe3eb] bg-white px-3.5 text-[10px] font-bold text-[#5e7084] no-underline transition hover:border-[#b8c6d6] hover:bg-[#f8fafc]" href="{{ route('kir.pdf', $ruangan) }}">Unduh PDF</a>
                     <a class="page-action-button inline-flex min-h-[38px] items-center justify-center rounded-[9px] border border-[#dbe3eb] bg-white px-3.5 text-[10px] font-bold text-[#5e7084] no-underline transition hover:border-[#b8c6d6] hover:bg-[#f8fafc]" href="{{ route('kir.word', $ruangan) }}">Unduh Word</a>
                 @endif
-                <button class="page-action-button import-excel-button inline-flex min-h-[38px] items-center justify-center rounded-[9px] border-0 px-3.5 text-[10px] font-bold text-white transition" type="button" data-modal-open="import-kir">Import Excel</button>
-            </div>
-        @elseif ($canExportKir)
-            <div class="flex flex-wrap justify-end gap-2 max-[680px]:grid max-[680px]:grid-cols-2">
-                <a class="page-action-button inline-flex min-h-[38px] items-center justify-center rounded-[9px] border border-[#dbe3eb] bg-white px-3.5 text-[10px] font-bold text-[#5e7084] no-underline transition hover:border-[#b8c6d6] hover:bg-[#f8fafc]" href="{{ route('kir.pdf', $ruangan) }}">Unduh PDF</a>
-                <a class="page-action-button inline-flex min-h-[38px] items-center justify-center rounded-[9px] border border-[#dbe3eb] bg-white px-3.5 text-[10px] font-bold text-[#5e7084] no-underline transition hover:border-[#b8c6d6] hover:bg-[#f8fafc]" href="{{ route('kir.word', $ruangan) }}">Unduh Word</a>
+                @if ($canImportKir)
+                    <button class="page-action-button import-excel-button inline-flex min-h-[38px] items-center justify-center rounded-[9px] border-0 px-3.5 text-[10px] font-bold text-white transition" type="button" data-modal-open="import-kir">Import Excel</button>
+                @endif
             </div>
         @endif
     </div>
@@ -67,7 +69,7 @@
             </div>
             <div class="px-5 py-4">
                 <span class="block text-[9px] font-extrabold uppercase tracking-[.08em] text-[#8997aa]">Penanggung Jawab Ruangan</span>
-                <strong class="mt-1 block text-[12px] text-[#0b2b50]">{{ $ruangan->penanggungJawab?->name ?? '-' }}</strong>
+                <strong class="mt-1 block text-[12px] text-[#0b2b50]">{{ $ruangan->pemegangAset?->nama_pegawai ?? $ruangan->penanggungJawab?->name ?? '-' }}</strong>
             </div>
         </div>
     </section>
@@ -80,7 +82,7 @@
             <button class="page-action-button inline-flex min-h-[38px] items-center justify-center rounded-[9px] border-0 bg-[#146bb5] px-3.5 text-[10px] font-bold text-white shadow-[0_8px_18px_rgb(20_107_181_/_16%)] transition hover:bg-[#0c568f]" type="submit">Cari</button>
             <a class="page-action-button inline-flex min-h-[38px] items-center justify-center rounded-[9px] border border-[#dbe3eb] bg-white px-3.5 text-[10px] font-bold text-[#5e7084] no-underline transition hover:border-[#b8c6d6] hover:bg-[#f8fafc]" href="{{ route('kir.show', $ruangan) }}">Reset</a>
             <div class="ml-auto flex items-center gap-3 max-[760px]:ml-0 max-[760px]:w-full max-[760px]:justify-between">
-                @if ($canManageKir)
+                @if ($canCreateKir)
                     <button class="page-action-button inline-flex min-h-[38px] items-center justify-center gap-2 rounded-[9px] border-0 bg-[#146bb5] px-3.5 text-[10px] font-bold text-white shadow-[0_8px_18px_rgb(20_107_181_/_16%)] transition hover:bg-[#0c568f]" type="button" data-modal-open="create-kir-detail">
                         <span class="text-sm font-normal leading-none">+</span> Tambah Barang
                     </button>
@@ -132,8 +134,12 @@
                             @if ($canManageKir)
                                 <td class="action-column">
                                     <div class="row-actions">
-                                        <button type="button" title="Edit" data-modal-open="edit-kir-detail-{{ $detail->id }}" aria-label="Edit {{ $detail->nama_barang }}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4L16.5 3.5Z" /></svg></button>
-                                        <button class="danger" type="button" title="Hapus" data-modal-open="delete-kir-detail-{{ $detail->id }}" aria-label="Hapus {{ $detail->nama_barang }}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M9 7l1-3h4l1 3m3 0-1 14H7L6 7" /></svg></button>
+                                        @if ($canUpdateKir)
+                                            <button type="button" title="Edit" data-modal-open="edit-kir-detail-{{ $detail->id }}" aria-label="Edit {{ $detail->nama_barang }}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4L16.5 3.5Z" /></svg></button>
+                                        @endif
+                                        @if ($canDeleteKir)
+                                            <button class="danger" type="button" title="Hapus" data-modal-open="delete-kir-detail-{{ $detail->id }}" aria-label="Hapus {{ $detail->nama_barang }}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M9 7l1-3h4l1 3m3 0-1 14H7L6 7" /></svg></button>
+                                        @endif
                                     </div>
                                 </td>
                             @endif
@@ -173,7 +179,8 @@
         </div>
     </section>
 
-    @if ($canManageKir)
+    @if ($canCreateKir || $canImportKir || $canUpdateKir || $canDeleteKir)
+        @if ($canCreateKir)
         <div class="fixed inset-0 z-80 {{ $openModal === 'create' ? 'grid' : 'hidden' }} place-items-center overflow-y-auto bg-[rgb(5_22_38_/_48%)] p-6 animate-[modalBackdropIn_.2s_ease-out_both] max-[580px]:p-3" data-modal="create-kir-detail" role="presentation">
             <section class="w-[min(900px,100%)] max-h-[calc(100vh-48px)] overflow-y-auto rounded-2xl bg-white shadow-[0_25px_80px_rgb(2_19_34_/_28%)] animate-[modalZoomIn_.24s_cubic-bezier(.2,.8,.2,1)_both]" role="dialog" aria-modal="true">
                 <header class="flex min-h-[83px] items-center justify-between border-b border-[#edf1f5] px-[22px] py-[17px]">
@@ -191,7 +198,9 @@
                 </form>
             </section>
         </div>
+        @endif
 
+        @if ($canImportKir)
         <div class="fixed inset-0 z-80 {{ $openModal === 'import' ? 'grid' : 'hidden' }} place-items-center overflow-y-auto bg-[rgb(5_22_38_/_48%)] p-6 animate-[modalBackdropIn_.2s_ease-out_both] max-[580px]:p-3" data-modal="import-kir" role="presentation">
             <section class="w-[min(620px,100%)] rounded-2xl bg-white shadow-[0_25px_80px_rgb(2_19_34_/_28%)] animate-[modalZoomIn_.24s_cubic-bezier(.2,.8,.2,1)_both]" role="dialog" aria-modal="true">
                 <header class="flex min-h-[83px] items-center justify-between border-b border-[#edf1f5] px-[22px] py-[17px]"><h2 class="m-0 text-xl font-extrabold text-[#0b2b50]">Import KIR dari Excel</h2><button class="inline-flex h-[34px] w-[34px] items-center justify-center rounded-[9px] border-0 bg-[#f2f5f8] text-[#8291a2]" type="button" data-modal-close aria-label="Tutup"><svg class="h-[18px] w-[18px] fill-none stroke-current stroke-[2.4] [stroke-linecap:round]" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg></button></header>
@@ -209,7 +218,9 @@
                         <strong class="mb-1 block text-[#34445a]">Format kolom Excel</strong>
                         NIBAR, Nomor Register, Kode Lokasi, Kode Barang, Nama Barang, Spesifikasi Nama Barang, Merek/Tipe, Tahun Perolehan, Jumlah, Satuan, Keterangan.
                     </div>
-                    <a class="page-action-button inline-flex min-h-[38px] items-center justify-center rounded-[9px] border border-[#dbe3eb] bg-white px-3.5 text-[10px] font-bold text-[#5e7084] no-underline transition hover:border-[#b8c6d6] hover:bg-[#f8fafc]" href="{{ route('kir.template', $ruangan) }}">Unduh Template</a>
+                    @if ($canDownloadTemplateKir)
+                        <a class="page-action-button inline-flex min-h-[38px] items-center justify-center rounded-[9px] border border-[#dbe3eb] bg-white px-3.5 text-[10px] font-bold text-[#5e7084] no-underline transition hover:border-[#b8c6d6] hover:bg-[#f8fafc]" href="{{ route('kir.template', $ruangan) }}">Unduh Template</a>
+                    @endif
                     <label class="grid gap-2 text-[11px] font-extrabold text-[#34445a]">
                         File Excel / CSV (maks. 10 MB)
                         <input class="w-full rounded-[9px] border border-[#dce4ee] bg-white px-3 py-3 text-[10px] font-semibold text-[#34445a] file:mr-3 file:rounded-md file:border-0 file:bg-[#e8f3ff] file:px-3 file:py-2 file:text-[10px] file:font-extrabold file:text-[#146bb5]" type="file" name="file" accept=".xlsx,.xls,.csv" required>
@@ -218,12 +229,14 @@
                 </form>
             </section>
         </div>
+        @endif
 
         @foreach ($details as $detail)
             @php
                 $editOpen = $openModal === 'edit-'.$detail->id;
                 $deleteOpen = $openModal === 'delete-'.$detail->id;
             @endphp
+            @if ($canUpdateKir)
             <div class="fixed inset-0 z-80 {{ $editOpen ? 'grid' : 'hidden' }} place-items-center overflow-y-auto bg-[rgb(5_22_38_/_48%)] p-6 animate-[modalBackdropIn_.2s_ease-out_both] max-[580px]:p-3" data-modal="edit-kir-detail-{{ $detail->id }}" role="presentation">
                 <section class="w-[min(900px,100%)] max-h-[calc(100vh-48px)] overflow-y-auto rounded-2xl bg-white shadow-[0_25px_80px_rgb(2_19_34_/_28%)] animate-[modalZoomIn_.24s_cubic-bezier(.2,.8,.2,1)_both]" role="dialog" aria-modal="true">
                     <header class="flex min-h-[83px] items-center justify-between border-b border-[#edf1f5] px-[22px] py-[17px]"><h2 class="m-0 text-xl font-extrabold text-[#0b2b50]">Edit Barang KIR</h2><button class="inline-flex h-[34px] w-[34px] items-center justify-center rounded-[9px] border-0 bg-[#f2f5f8] text-[#8291a2]" type="button" data-modal-close aria-label="Tutup"><svg class="h-[18px] w-[18px] fill-none stroke-current stroke-[2.4] [stroke-linecap:round]" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg></button></header>
@@ -239,7 +252,9 @@
                     </form>
                 </section>
             </div>
+            @endif
 
+            @if ($canDeleteKir)
             <div class="fixed inset-0 z-80 {{ $deleteOpen ? 'grid' : 'hidden' }} place-items-center overflow-y-auto bg-[rgb(5_22_38_/_48%)] p-6 animate-[modalBackdropIn_.2s_ease-out_both] max-[580px]:p-3" data-modal="delete-kir-detail-{{ $detail->id }}" role="presentation">
                 <section class="w-[min(460px,100%)] rounded-2xl bg-white p-[27px] text-center shadow-[0_25px_80px_rgb(2_19_34_/_28%)] animate-[modalZoomIn_.24s_cubic-bezier(.2,.8,.2,1)_both]" role="alertdialog" aria-modal="true">
                     <span class="mx-auto mb-5 grid h-[54px] w-[54px] place-items-center rounded-full bg-[#fff1f0] text-[#c44f47]"><svg class="h-7 w-7 fill-none stroke-current stroke-[1.9] [stroke-linecap:round] [stroke-linejoin:round]" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M9 7l1-3h4l1 3m3 0-1 14H7L6 7" /></svg></span>
@@ -254,6 +269,7 @@
                     </form>
                 </section>
             </div>
+            @endif
         @endforeach
     @endif
 

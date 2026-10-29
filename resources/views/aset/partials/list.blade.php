@@ -1,8 +1,13 @@
 @php
     $userRole = auth()->user()?->role;
-    $canManageAssets = in_array($userRole, ['admin', 'super_admin'], true);
+    $canCreateAssets = auth()->user()?->hasPermission('aset.create') ?? false;
+    $canUpdateAssets = auth()->user()?->hasPermission('aset.update') ?? false;
+    $canUpdateAssetCondition = auth()->user()?->hasPermission('aset.condition.update') ?? false;
+    $canExportAssets = auth()->user()?->hasPermission('aset.export') ?? false;
+    $canImportAssets = auth()->user()?->hasPermission('aset.import') ?? false;
+    $canDeleteAssets = auth()->user()?->hasPermission('aset.delete') ?? false;
     $canVerifyAssets = in_array($userRole, ['tim_aset', 'super_admin'], true);
-    $canSeeAssetActions = in_array($userRole, ['admin', 'tim_aset', 'super_admin'], true);
+    $canSeeAssetActions = auth()->user()?->hasPermission('aset.view') ?? false;
     $numberStart = ($assets->currentPage() - 1) * $assets->perPage();
     $selectedPerPage = (int) request('per_page', $assets->perPage());
     $statusLabels = ['menunggu_verifikasi' => 'Menunggu Verifikasi', 'disetujui' => 'Disetujui', 'ditolak' => 'Ditolak'];
@@ -33,12 +38,16 @@
             <h1 class="m-0 mb-[3px] text-[clamp(25px,2.5vw,34px)] font-extrabold tracking-[-.035em] text-[#0b2b50]">{{ $title }}</h1>
             <p class="m-0 text-[13px] text-[#66758a]">{{ $description }}</p>
         </div>
-        @if (! $verificationMode && $canManageAssets)
+        @if (! $verificationMode && ($canImportAssets || $canCreateAssets))
             <div class="flex flex-wrap justify-end gap-2 max-[580px]:w-full max-[580px]:flex-col">
-                <button class="page-action-button import-excel-button inline-flex min-h-[38px] items-center justify-center rounded-[9px] border-0 px-3.5 text-[10px] font-bold text-white transition" type="button" data-modal-open="import-assets">Import Excel</button>
-                <button class="page-action-button inline-flex min-h-[38px] items-center justify-center gap-2 rounded-[9px] border-0 bg-[#146bb5] px-3.5 text-[10px] font-bold text-white shadow-[0_8px_18px_rgb(20_107_181_/_16%)] transition hover:bg-[#0c568f]" type="button" data-modal-open="create-asset">
-                    <span class="text-sm font-normal leading-none">+</span> Tambah Aset
-                </button>
+                @if ($canImportAssets)
+                    <button class="page-action-button import-excel-button inline-flex min-h-[38px] items-center justify-center rounded-[9px] border-0 px-3.5 text-[10px] font-bold text-white transition" type="button" data-modal-open="import-assets">Import Excel</button>
+                @endif
+                @if ($canCreateAssets)
+                    <button class="page-action-button inline-flex min-h-[38px] items-center justify-center gap-2 rounded-[9px] border-0 bg-[#146bb5] px-3.5 text-[10px] font-bold text-white shadow-[0_8px_18px_rgb(20_107_181_/_16%)] transition hover:bg-[#0c568f]" type="button" data-modal-open="create-asset">
+                        <span class="text-sm font-normal leading-none">+</span> Tambah Aset
+                    </button>
+                @endif
             </div>
         @endif
     </div>
@@ -92,7 +101,9 @@
             @if (request()->hasAny(['search', 'kategori_id', 'kondisi', 'status_verifikasi']))
                 <a class="page-action-button inline-flex min-h-[38px] items-center justify-center rounded-[9px] border border-[#dbe3eb] bg-white px-3.5 text-[10px] font-bold text-[#5e7084] no-underline transition hover:border-[#b8c6d6] hover:bg-[#f8fafc]" href="{{ route($routeName) }}">Reset</a>
             @endif
-            <x-export-dropdown dataset="aset" />
+            @if ($canExportAssets)
+                <x-export-dropdown dataset="aset" />
+            @endif
         </form>
 
         <div class="table-scroll">
@@ -159,11 +170,13 @@
                                         <a href="{{ route('web.aset.show', $asset) }}" aria-label="Lihat {{ $asset->nama_aset }}" title="Detail dan QR">
                                             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Zm10 3a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" /></svg>
                                         </a>
-                                        @if ($canManageAssets && ! $verificationMode)
+                                        @if ($canUpdateAssets && ! $verificationMode)
                                             <button type="button" data-modal-open="edit-asset-{{ $asset->id }}" aria-label="Edit {{ $asset->nama_aset }}" title="Edit"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4L16.5 3.5Z" /></svg></button>
+                                        @endif
+                                        @if ($canDeleteAssets && ! $verificationMode)
                                             <button class="danger" type="button" data-modal-open="delete-asset-{{ $asset->id }}" aria-label="Hapus {{ $asset->nama_aset }}" title="Hapus"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M9 7l1-3h4l1 3m3 0-1 14H7L6 7" /></svg></button>
                                         @endif
-                                        @if ($status === 'disetujui' && ($canManageAssets || $userRole === 'tim_aset'))
+                                        @if ($status === 'disetujui' && $canUpdateAssetCondition)
                                             <button type="button" data-modal-open="condition-asset-{{ $asset->id }}" title="Ubah kondisi" aria-label="Ubah kondisi {{ $asset->nama_aset }}"><svg viewBox="0 0 24 24"><path d="M14.7 6.3a4 4 0 0 0-5-5L12 3.6 9.6 6 7.3 3.7a4 4 0 0 0 5 5L4 17l3 3 7.7-7.7a4 4 0 0 0 5-5L17.4 9.6 15 7.2l-.3-.9Z" /></svg></button>
                                         @endif
                                         @if ($canVerifyAssets && $status === 'menunggu_verifikasi')
@@ -221,17 +234,25 @@
         @include('aset.partials.stock-opname-master', ['items' => $stockOpnameItems ?? collect()])
     @endif
 
-    @if ($canManageAssets && ! $verificationMode)
-        @include('aset.partials.modals', ['asset' => null, 'mode' => 'create'])
-        @include('aset.partials.import-modal')
+    @if (! $verificationMode)
+        @if ($canCreateAssets)
+            @include('aset.partials.modals', ['asset' => null, 'mode' => 'create'])
+        @endif
+        @if ($canImportAssets)
+            @include('aset.partials.import-modal')
+        @endif
         @foreach ($assets as $asset)
-            @include('aset.partials.modals', ['asset' => $asset, 'mode' => 'edit'])
-            @include('aset.partials.delete-modal', ['asset' => $asset])
+            @if ($canUpdateAssets)
+                @include('aset.partials.modals', ['asset' => $asset, 'mode' => 'edit'])
+            @endif
+            @if ($canDeleteAssets)
+                @include('aset.partials.delete-modal', ['asset' => $asset])
+            @endif
         @endforeach
     @endif
 
     @foreach ($assets as $asset)
-        @if (($asset->status_verifikasi ?? 'disetujui') === 'disetujui' && ($canManageAssets || $userRole === 'tim_aset'))
+        @if (($asset->status_verifikasi ?? 'disetujui') === 'disetujui' && $canUpdateAssetCondition)
             @include('aset.partials.condition-modal', ['asset' => $asset])
         @endif
     @endforeach

@@ -18,7 +18,6 @@ use App\Http\Controllers\KategoriStockOpnameController;
 use App\Http\Controllers\LoanRequestController;
 use App\Http\Controllers\PermintaanPersediaanController;
 use App\Http\Controllers\ProfileController;
-use App\Http\Controllers\ProcurementController;
 use App\Http\Controllers\ProcurementProposalController;
 use App\Http\Controllers\PublicAssetController;
 use App\Http\Controllers\RoleController;
@@ -62,21 +61,50 @@ Route::get('/kodefikasi-internal', [KodefikasiInternalController::class, 'index'
     ->name('kodefikasi-internal.index');
 
 Route::get('/kodefikasi/{type}/template', [KodefikasiController::class, 'template'])
-    ->middleware(['auth', 'role:admin,super_admin,tim_aset'])
+    ->middleware(['auth', 'permission:kodefikasi.import'])
+    ->where('type', 'kode-barang|kode-persediaan|kode-lokasi')
     ->name('kodefikasi.template');
 
-Route::middleware(['auth', 'role:admin,super_admin'])->group(function () {
-    Route::post('/kodefikasi-internal/bulk-generate', [KodefikasiInternalController::class, 'bulkGenerate'])->name('kodefikasi-internal.bulk-generate');
-    Route::post('/kodefikasi-internal/{asset}/generate', [KodefikasiInternalController::class, 'generate'])->whereNumber('asset')->name('kodefikasi-internal.generate');
-    Route::patch('/kodefikasi-internal/{asset}', [KodefikasiInternalController::class, 'update'])->whereNumber('asset')->name('kodefikasi-internal.update');
-    Route::patch('/kodefikasi-internal/{asset}/reset', [KodefikasiInternalController::class, 'reset'])->whereNumber('asset')->name('kodefikasi-internal.reset');
+Route::middleware(['auth'])->group(function () {
+    Route::post('/kodefikasi-internal/bulk-generate', [KodefikasiInternalController::class, 'bulkGenerate'])
+        ->middleware('permission:kodefikasi_internal.bulk_generate')
+        ->name('kodefikasi-internal.bulk-generate');
+    Route::post('/kodefikasi-internal/{asset}/generate', [KodefikasiInternalController::class, 'generate'])
+        ->middleware('permission:kodefikasi_internal.generate')
+        ->whereNumber('asset')
+        ->name('kodefikasi-internal.generate');
 });
 
-Route::middleware(['auth', 'role:admin'])->group(function () {
-    Route::post('/kodefikasi/{type}', [KodefikasiController::class, 'store'])->name('kodefikasi.store');
-    Route::put('/kodefikasi/{type}/{id}', [KodefikasiController::class, 'update'])->whereNumber('id')->name('kodefikasi.update');
-    Route::delete('/kodefikasi/{type}/{id}', [KodefikasiController::class, 'destroy'])->whereNumber('id')->name('kodefikasi.destroy');
-    Route::post('/kodefikasi/{type}/impor', [KodefikasiController::class, 'import'])->name('kodefikasi.import');
+Route::middleware(['auth'])->group(function () {
+    Route::patch('/kodefikasi-internal/{asset}', [KodefikasiInternalController::class, 'update'])
+        ->middleware('permission:kodefikasi_internal.update')
+        ->whereNumber('asset')
+        ->name('kodefikasi-internal.update');
+    Route::patch('/kodefikasi-internal/{asset}/reset', [KodefikasiInternalController::class, 'reset'])
+        ->middleware('permission:kodefikasi_internal.reset')
+        ->whereNumber('asset')
+        ->name('kodefikasi-internal.reset');
+});
+
+Route::middleware(['auth'])->group(function () {
+    Route::post('/kodefikasi/{type}', [KodefikasiController::class, 'store'])
+        ->middleware('permission:kodefikasi.create')
+        ->where('type', 'kode-barang|kode-persediaan|kode-lokasi')
+        ->name('kodefikasi.store');
+    Route::put('/kodefikasi/{type}/{id}', [KodefikasiController::class, 'update'])
+        ->middleware('permission:kodefikasi.update')
+        ->where('type', 'kode-barang|kode-persediaan|kode-lokasi')
+        ->whereNumber('id')
+        ->name('kodefikasi.update');
+    Route::delete('/kodefikasi/{type}/{id}', [KodefikasiController::class, 'destroy'])
+        ->middleware('permission:kodefikasi.delete')
+        ->where('type', 'kode-barang|kode-persediaan|kode-lokasi')
+        ->whereNumber('id')
+        ->name('kodefikasi.destroy');
+    Route::post('/kodefikasi/{type}/impor', [KodefikasiController::class, 'import'])
+        ->middleware('permission:kodefikasi.import')
+        ->where('type', 'kode-barang|kode-persediaan|kode-lokasi')
+        ->name('kodefikasi.import');
 });
 
 Route::get('/dashboard', DashboardController::class)
@@ -95,23 +123,21 @@ Route::middleware(['auth', 'permission:roles.view'])->group(function () {
     Route::get('/roles', [RoleController::class, 'index'])->name('web.roles.index');
 });
 
-Route::middleware(['auth', 'role:admin'])->group(function () {
-    Route::post('/stock-opname', [StockOpnameController::class, 'store'])->name('stock-opname.store');
-    Route::get('/stock-opname/template-impor', [StockOpnameController::class, 'importTemplate'])->name('stock-opname.import-template');
-    Route::post('/stock-opname/impor/preview', [StockOpnameController::class, 'importPreview'])->name('stock-opname.import-preview');
-    Route::post('/stock-opname/impor', [StockOpnameController::class, 'import'])->name('stock-opname.import');
-    Route::put('/stock-opname/{stockOpnameItem}', [StockOpnameController::class, 'update'])->name('stock-opname.update')->whereNumber('stockOpnameItem');
-    Route::patch('/stock-opname/{stockOpnameItem}/tambah-stok', [StockOpnameController::class, 'addStock'])->name('stock-opname.add-stock')->whereNumber('stockOpnameItem');
-    Route::patch('/stock-opname/{stockOpnameItem}/adjust', [StockOpnameController::class, 'adjust'])->name('stock-opname.adjust')->whereNumber('stockOpnameItem');
-    Route::post('/kategori-stock-opname', [KategoriStockOpnameController::class, 'store'])->name('kategori-stock-opname.store');
-    Route::put('/kategori-stock-opname/{kategoriStockOpname}', [KategoriStockOpnameController::class, 'update'])->name('kategori-stock-opname.update')->whereNumber('kategoriStockOpname');
-    Route::delete('/kategori-stock-opname/{kategoriStockOpname}', [KategoriStockOpnameController::class, 'destroy'])->name('kategori-stock-opname.destroy')->whereNumber('kategoriStockOpname');
+Route::middleware(['auth'])->group(function () {
+    Route::post('/stock-opname', [StockOpnameController::class, 'store'])->middleware('permission:stock_opname.create')->name('stock-opname.store');
+    Route::get('/stock-opname/template-impor', [StockOpnameController::class, 'importTemplate'])->middleware('permission:stock_opname.template.download')->name('stock-opname.import-template');
+    Route::post('/stock-opname/impor/preview', [StockOpnameController::class, 'importPreview'])->middleware('permission:stock_opname.import')->name('stock-opname.import-preview');
+    Route::post('/stock-opname/impor', [StockOpnameController::class, 'import'])->middleware('permission:stock_opname.import')->name('stock-opname.import');
+    Route::put('/stock-opname/{stockOpnameItem}', [StockOpnameController::class, 'update'])->middleware('permission:stock_opname.update')->name('stock-opname.update')->whereNumber('stockOpnameItem');
+    Route::patch('/stock-opname/{stockOpnameItem}/tambah-stok', [StockOpnameController::class, 'addStock'])->middleware('permission:stock_opname.stock.add')->name('stock-opname.add-stock')->whereNumber('stockOpnameItem');
+    Route::patch('/stock-opname/{stockOpnameItem}/adjust', [StockOpnameController::class, 'adjust'])->middleware('permission:stock_opname.stock.adjust')->name('stock-opname.adjust')->whereNumber('stockOpnameItem');
 });
 
-Route::patch('/stock-opname/{stockOpnameItem}/verify', [StockOpnameController::class, 'verify'])
-    ->middleware(['auth', 'role:tim_aset,timaset_persediaan,tim_aset_persediaan'])
-    ->name('stock-opname.verify')
-    ->whereNumber('stockOpnameItem');
+Route::middleware(['auth'])->group(function () {
+    Route::post('/kategori-stock-opname', [KategoriStockOpnameController::class, 'store'])->middleware('permission:kategori_stock_opname.create')->name('kategori-stock-opname.store');
+    Route::put('/kategori-stock-opname/{kategoriStockOpname}', [KategoriStockOpnameController::class, 'update'])->middleware('permission:kategori_stock_opname.update')->name('kategori-stock-opname.update')->whereNumber('kategoriStockOpname');
+    Route::delete('/kategori-stock-opname/{kategoriStockOpname}', [KategoriStockOpnameController::class, 'destroy'])->middleware('permission:kategori_stock_opname.delete')->name('kategori-stock-opname.destroy')->whereNumber('kategoriStockOpname');
+});
 
 Route::delete('/stock-opname/{stockOpnameItem}', [StockOpnameController::class, 'destroy'])
     ->middleware(['auth', 'role:super_admin'])
@@ -123,16 +149,16 @@ Route::get('/permintaan-persediaan', [PermintaanPersediaanController::class, 'in
     ->name('permintaan-persediaan.index');
 
 Route::post('/permintaan-persediaan', [PermintaanPersediaanController::class, 'store'])
-    ->middleware(['auth', 'role:admin_bidang,super_admin'])
+    ->middleware(['auth', 'permission:permintaan.create'])
     ->name('permintaan-persediaan.store');
 
 Route::patch('/permintaan-persediaan/{permintaanPersediaan}/verifikasi', [PermintaanPersediaanController::class, 'verify'])
-    ->middleware(['auth', 'role:timaset_persediaan,tim_aset_persediaan,super_admin'])
+    ->middleware(['auth', 'permission:permintaan.verify'])
     ->name('permintaan-persediaan.verify')
     ->whereNumber('permintaanPersediaan');
 
 Route::patch('/permintaan-persediaan/{permintaanPersediaan}/penyerahan', [PermintaanPersediaanController::class, 'handover'])
-    ->middleware(['auth', 'role:timaset_persediaan,tim_aset_persediaan,super_admin'])
+    ->middleware(['auth', 'permission:permintaan.handover'])
     ->name('permintaan-persediaan.handover')
     ->whereNumber('permintaanPersediaan');
 
@@ -147,14 +173,30 @@ Route::get('/ruangan', [RuanganController::class, 'index'])
     ->middleware(['auth', 'permission:ruangan.view'])
     ->name('ruangan.index');
 
-Route::middleware(['auth', 'role:admin'])->group(function () {
-    Route::post('/kategori-aset', [AssetCategoryController::class, 'store'])->name('web.kategori-aset.store');
-    Route::put('/kategori-aset/{asset_category}', [AssetCategoryController::class, 'update'])->name('web.kategori-aset.update');
-    Route::delete('/kategori-aset/{asset_category}', [AssetCategoryController::class, 'destroy'])->name('web.kategori-aset.destroy');
+Route::middleware(['auth'])->group(function () {
+    Route::post('/kategori-aset', [AssetCategoryController::class, 'store'])
+        ->middleware('permission:kategori_aset.create')
+        ->name('web.kategori-aset.store');
+    Route::put('/kategori-aset/{asset_category}', [AssetCategoryController::class, 'update'])
+        ->middleware('permission:kategori_aset.update')
+        ->name('web.kategori-aset.update');
+    Route::delete('/kategori-aset/{asset_category}', [AssetCategoryController::class, 'destroy'])
+        ->middleware('permission:kategori_aset.delete')
+        ->name('web.kategori-aset.destroy');
+});
 
-    Route::post('/ruangan', [RuanganController::class, 'store'])->name('ruangan.store');
-    Route::put('/ruangan/{ruangan}', [RuanganController::class, 'update'])->name('ruangan.update')->whereNumber('ruangan');
-    Route::delete('/ruangan/{ruangan}', [RuanganController::class, 'destroy'])->name('ruangan.destroy')->whereNumber('ruangan');
+Route::middleware(['auth'])->group(function () {
+    Route::post('/ruangan', [RuanganController::class, 'store'])
+        ->middleware('permission:ruangan.create')
+        ->name('ruangan.store');
+    Route::put('/ruangan/{ruangan}', [RuanganController::class, 'update'])
+        ->middleware('permission:ruangan.update')
+        ->whereNumber('ruangan')
+        ->name('ruangan.update');
+    Route::delete('/ruangan/{ruangan}', [RuanganController::class, 'destroy'])
+        ->middleware('permission:ruangan.delete')
+        ->whereNumber('ruangan')
+        ->name('ruangan.destroy');
 });
 
 Route::middleware(['auth', 'permission:kir.view'])->group(function () {
@@ -162,18 +204,21 @@ Route::middleware(['auth', 'permission:kir.view'])->group(function () {
     Route::get('/kir/{ruangan}', [KirController::class, 'show'])->name('kir.show')->whereNumber('ruangan');
 });
 
-Route::middleware(['auth', 'role:admin'])->group(function () {
-    Route::get('/kir/{ruangan}/pdf', [KirController::class, 'pdf'])->name('kir.pdf')->whereNumber('ruangan');
-    Route::get('/kir/{ruangan}/word', [KirController::class, 'word'])->name('kir.word')->whereNumber('ruangan');
+Route::middleware(['auth'])->group(function () {
+    Route::get('/kir/{ruangan}/pdf', [KirController::class, 'pdf'])->middleware('permission:kir.download')->name('kir.pdf')->whereNumber('ruangan');
+    Route::get('/kir/{ruangan}/word', [KirController::class, 'word'])->middleware('permission:kir.download')->name('kir.word')->whereNumber('ruangan');
+});
+
+Route::middleware(['auth', 'permission:laporan_aset.export'])->group(function () {
     Route::post('/kir/sinkronisasi', [KirController::class, 'synchronize'])->name('kir.synchronize');
 });
 
-Route::middleware(['auth', 'role:admin'])->group(function () {
-    Route::post('/kir/{ruangan}', [KirController::class, 'store'])->name('kir.store')->whereNumber('ruangan');
-    Route::post('/kir/{ruangan}/impor', [KirController::class, 'import'])->name('kir.import')->whereNumber('ruangan');
-    Route::get('/kir/{ruangan}/template', [KirController::class, 'template'])->name('kir.template')->whereNumber('ruangan');
-    Route::put('/kir/{ruangan}/{detailKir}', [KirController::class, 'update'])->name('kir.update')->whereNumber('ruangan')->whereNumber('detailKir');
-    Route::delete('/kir/{ruangan}/{detailKir}', [KirController::class, 'destroy'])->name('kir.destroy')->whereNumber('ruangan')->whereNumber('detailKir');
+Route::middleware(['auth'])->group(function () {
+    Route::post('/kir/{ruangan}', [KirController::class, 'store'])->middleware('permission:kir.create')->name('kir.store')->whereNumber('ruangan');
+    Route::post('/kir/{ruangan}/impor', [KirController::class, 'import'])->middleware('permission:kir.import')->name('kir.import')->whereNumber('ruangan');
+    Route::get('/kir/{ruangan}/template', [KirController::class, 'template'])->middleware('permission:kir.template.download')->name('kir.template')->whereNumber('ruangan');
+    Route::put('/kir/{ruangan}/{detailKir}', [KirController::class, 'update'])->middleware('permission:kir.update')->name('kir.update')->whereNumber('ruangan')->whereNumber('detailKir');
+    Route::delete('/kir/{ruangan}/{detailKir}', [KirController::class, 'destroy'])->middleware('permission:kir.delete')->name('kir.destroy')->whereNumber('ruangan')->whereNumber('detailKir');
 });
 
 Route::middleware(['auth', 'permission:aset.view'])->group(function () {
@@ -181,16 +226,27 @@ Route::middleware(['auth', 'permission:aset.view'])->group(function () {
     Route::get('/aset/{asset}', [AssetController::class, 'show'])->name('web.aset.show')->whereNumber('asset');
     Route::get('/aset/{asset}/qr.svg', [AssetQrController::class, 'svg'])->name('web.aset.qr.svg')->whereNumber('asset');
     Route::patch('/aset/{asset}/kondisi', [AssetController::class, 'updateCondition'])
-        ->middleware('role:admin,tim_aset')
+        ->middleware('permission:aset.condition.update')
         ->name('web.aset.kondisi');
 
-    Route::middleware('role:admin')->group(function () {
-        Route::post('/aset', [AssetController::class, 'store'])->name('web.aset.store');
-        Route::put('/aset/{asset}', [AssetController::class, 'update'])->name('web.aset.update')->whereNumber('asset');
-        Route::delete('/aset/{asset}', [AssetController::class, 'destroy'])->name('web.aset.destroy')->whereNumber('asset');
-        Route::get('/aset/template-impor', [AssetController::class, 'importTemplate'])->name('web.aset.template-impor');
-        Route::post('/aset/impor', [AssetController::class, 'import'])->name('web.aset.impor');
-    });
+    Route::post('/aset', [AssetController::class, 'store'])
+        ->middleware('permission:aset.create')
+        ->name('web.aset.store');
+    Route::put('/aset/{asset}', [AssetController::class, 'update'])
+        ->middleware('permission:aset.update')
+        ->name('web.aset.update')
+        ->whereNumber('asset');
+
+    Route::delete('/aset/{asset}', [AssetController::class, 'destroy'])
+        ->middleware('permission:aset.delete')
+        ->name('web.aset.destroy')
+        ->whereNumber('asset');
+    Route::get('/aset/template-impor', [AssetController::class, 'importTemplate'])
+        ->middleware('permission:aset.import')
+        ->name('web.aset.template-impor');
+    Route::post('/aset/impor', [AssetController::class, 'import'])
+        ->middleware('permission:aset.import')
+        ->name('web.aset.impor');
 
     Route::middleware('role:tim_aset')->group(function () {
         Route::get('/verifikasi-barang', [AssetController::class, 'verification'])->name('web.aset.verifikasi.index');
@@ -204,25 +260,25 @@ Route::middleware(['auth', 'permission:peminjaman.view'])->group(function () {
 });
 
 Route::get('/verifikasi-peminjaman', [LoanRequestController::class, 'verification'])
-    ->middleware(['auth', 'role:tim_aset'])
+    ->middleware(['auth', 'permission:peminjaman.verify'])
     ->name('web.peminjaman.verifikasi.index');
 
 Route::post('/peminjaman', [LoanRequestController::class, 'store'])
-    ->middleware(['auth', 'role:admin_bidang'])
+    ->middleware(['auth', 'permission:peminjaman.create'])
     ->name('web.peminjaman.store');
 
 Route::patch('/peminjaman/{loanRequest}/keputusan', [LoanRequestController::class, 'decide'])
-    ->middleware(['auth', 'role:tim_aset,kasubbag_umum_perencanaan'])
+    ->middleware('auth')
     ->name('web.peminjaman.keputusan')
     ->whereNumber('loanRequest');
 
 Route::patch('/peminjaman/{loanRequest}/penyerahan', [LoanRequestController::class, 'handOver'])
-    ->middleware(['auth', 'role:tim_aset'])
+    ->middleware(['auth', 'permission:peminjaman.handover'])
     ->name('web.peminjaman.penyerahan')
     ->whereNumber('loanRequest');
 
 Route::patch('/peminjaman/{loanRequest}/pengembalian', [LoanRequestController::class, 'receiveReturn'])
-    ->middleware(['auth', 'role:tim_aset'])
+    ->middleware(['auth', 'permission:peminjaman.return'])
     ->name('web.peminjaman.pengembalian')
     ->whereNumber('loanRequest');
 
@@ -231,7 +287,7 @@ Route::delete('/peminjaman/{loanRequest}', [LoanRequestController::class, 'destr
     ->name('web.peminjaman.destroy')
     ->whereNumber('loanRequest');
 
-Route::middleware(['auth', 'role:admin,admin_bidang,tim_aset,super_admin'])->group(function () {
+Route::middleware(['auth', 'permission:pemeliharaan.download'])->group(function () {
     Route::get('/pemeliharaan-aset/{assetMaintenance}/berita-acara', [AssetMaintenanceController::class, 'pdf'])->name('pemeliharaan-aset.pdf')->whereNumber('assetMaintenance');
     Route::get('/pemeliharaan-aset/{assetMaintenance}/berita-acara/word', [AssetMaintenanceController::class, 'word'])->name('pemeliharaan-aset.word')->whereNumber('assetMaintenance');
     Route::get('/pemeliharaan-aset/dokumen/{document}', [AssetMaintenanceController::class, 'downloadDocument'])->name('pemeliharaan-aset.document')->whereNumber('document');
@@ -242,36 +298,36 @@ Route::get('/pemeliharaan-aset', [AssetMaintenanceController::class, 'index'])
     ->name('pemeliharaan-aset.index');
 
 Route::post('/pemeliharaan-aset', [AssetMaintenanceController::class, 'store'])
-    ->middleware(['auth', 'role:admin_bidang,tim_aset,super_admin'])
+    ->middleware(['auth', 'permission:pemeliharaan.create'])
     ->name('pemeliharaan-aset.store');
 
 Route::patch('/pemeliharaan-aset/{assetMaintenance}/verifikasi', [AssetMaintenanceController::class, 'verify'])
-    ->middleware(['auth', 'role:tim_aset,super_admin'])
+    ->middleware(['auth', 'permission:pemeliharaan.verify'])
     ->name('pemeliharaan-aset.verify')
     ->whereNumber('assetMaintenance');
 
 Route::patch('/pemeliharaan-aset/{assetMaintenance}', [AssetMaintenanceController::class, 'update'])
-    ->middleware(['auth', 'role:tim_aset,super_admin'])
+    ->middleware(['auth', 'permission:pemeliharaan.update'])
     ->name('pemeliharaan-aset.update')
     ->whereNumber('assetMaintenance');
 
 Route::delete('/pemeliharaan-aset/{assetMaintenance}', [AssetMaintenanceController::class, 'destroy'])
-    ->middleware(['auth', 'role:tim_aset,super_admin'])
+    ->middleware(['auth', 'role:super_admin'])
     ->name('pemeliharaan-aset.destroy')
     ->whereNumber('assetMaintenance');
 
 Route::patch('/pemeliharaan-aset/{assetMaintenance}/mulai', [AssetMaintenanceController::class, 'start'])
-    ->middleware(['auth', 'role:tim_aset,super_admin'])
+    ->middleware(['auth', 'permission:pemeliharaan.start'])
     ->name('pemeliharaan-aset.start')
     ->whereNumber('assetMaintenance');
 
 Route::patch('/pemeliharaan-aset/{assetMaintenance}/selesai', [AssetMaintenanceController::class, 'complete'])
-    ->middleware(['auth', 'role:tim_aset,super_admin'])
+    ->middleware(['auth', 'permission:pemeliharaan.complete'])
     ->name('pemeliharaan-aset.complete')
     ->whereNumber('assetMaintenance');
 
 Route::patch('/pemeliharaan-aset/{assetMaintenance}/berita-acara', [AssetMaintenanceController::class, 'updateReportData'])
-    ->middleware(['auth', 'role:tim_aset,super_admin'])
+    ->middleware(['auth', 'permission:pemeliharaan.report.update'])
     ->name('pemeliharaan-aset.report-data')
     ->whereNumber('assetMaintenance');
 
@@ -280,14 +336,27 @@ Route::middleware(['auth', 'permission:usulan_pengadaan.view'])->group(function 
     Route::get('/usulan-pengadaan/{procurementProposal}', [ProcurementProposalController::class, 'show'])
         ->name('web.usulan-pengadaan.show')
         ->whereNumber('procurementProposal');
+    Route::get('/usulan-pengadaan/{procurementProposal}/download-pdf', [ProcurementProposalController::class, 'pdf'])
+        ->name('web.usulan-pengadaan.pdf')
+        ->whereNumber('procurementProposal');
 });
 
 Route::post('/usulan-pengadaan', [ProcurementProposalController::class, 'store'])
-    ->middleware(['auth', 'role:admin_bidang'])
+    ->middleware(['auth', 'permission:usulan_pengadaan.create'])
     ->name('web.usulan-pengadaan.store');
 
+Route::patch('/usulan-pengadaan/{procurementProposal}', [ProcurementProposalController::class, 'update'])
+    ->middleware('auth')
+    ->name('web.usulan-pengadaan.update')
+    ->whereNumber('procurementProposal');
+
+Route::delete('/usulan-pengadaan/{procurementProposal}', [ProcurementProposalController::class, 'destroy'])
+    ->middleware(['auth', 'role:super_admin'])
+    ->name('web.usulan-pengadaan.destroy')
+    ->whereNumber('procurementProposal');
+
 Route::patch('/usulan-pengadaan/{procurementProposal}/keputusan-tim-aset', [ProcurementProposalController::class, 'assetTeamDecision'])
-    ->middleware(['auth', 'role:tim_aset'])
+    ->middleware(['auth', 'permission:usulan_pengadaan.verify'])
     ->name('web.usulan-pengadaan.keputusan-tim-aset')
     ->whereNumber('procurementProposal');
 
@@ -295,25 +364,6 @@ Route::patch('/usulan-pengadaan/{procurementProposal}/keputusan-kasubbag', [Proc
     ->middleware(['auth', 'role:kasubbag_umum_perencanaan'])
     ->name('web.usulan-pengadaan.keputusan-kasubbag')
     ->whereNumber('procurementProposal');
-
-Route::middleware(['auth', 'permission:pengadaan.view'])->group(function () {
-    Route::get('/pengadaan', [ProcurementController::class, 'index'])->name('pengadaan.index');
-    Route::get('/pengadaan/{procurement}', [ProcurementController::class, 'show'])->name('pengadaan.show')->whereNumber('procurement');
-});
-
-Route::post('/pengadaan', [ProcurementController::class, 'store'])
-    ->middleware(['auth', 'role:admin,tim_aset'])
-    ->name('pengadaan.store');
-
-Route::patch('/pengadaan/{procurement}/penerimaan', [ProcurementController::class, 'receive'])
-    ->middleware(['auth', 'role:admin,tim_aset'])
-    ->name('pengadaan.penerimaan')
-    ->whereNumber('procurement');
-
-Route::patch('/pengadaan/{procurement}/verifikasi', [ProcurementController::class, 'verify'])
-    ->middleware(['auth', 'role:tim_aset'])
-    ->name('pengadaan.verifikasi')
-    ->whereNumber('procurement');
 
 Route::middleware(['auth', 'permission:penghapusan.view'])->group(function () {
     Route::get('/penghapusan-aset', [AssetDisposalRequestController::class, 'index'])->name('penghapusan-aset.index');
@@ -331,7 +381,7 @@ Route::middleware(['auth', 'permission:penghapusan.view'])->group(function () {
         ->whereNumber('assetDisposalRequest');
 });
 
-Route::middleware(['auth', 'role:admin,tim_aset,kasubbag_umum_perencanaan'])->group(function () {
+Route::middleware(['auth', 'permission:penghapusan.download'])->group(function () {
     Route::get('/penghapusan-aset/bukti/{evidence}', [AssetDisposalRequestController::class, 'downloadEvidence'])
         ->name('penghapusan-aset.bukti')
         ->whereNumber('evidence');
@@ -341,11 +391,11 @@ Route::middleware(['auth', 'role:admin,tim_aset,kasubbag_umum_perencanaan'])->gr
 });
 
 Route::post('/penghapusan-aset', [AssetDisposalRequestController::class, 'store'])
-    ->middleware(['auth', 'role:tim_aset'])
+    ->middleware(['auth', 'permission:penghapusan.create'])
     ->name('penghapusan-aset.store');
 
 Route::patch('/penghapusan-aset/{assetDisposalRequest}/keputusan', [AssetDisposalRequestController::class, 'decide'])
-    ->middleware(['auth', 'role:kasubbag_umum_perencanaan'])
+    ->middleware(['auth', 'permission:penghapusan.approve'])
     ->name('penghapusan-aset.keputusan')
     ->whereNumber('assetDisposalRequest');
 
@@ -358,7 +408,11 @@ Route::get('/laporan', [AssetReportController::class, 'index'])
     ->middleware(['auth', 'permission:laporan_aset.view'])
     ->name('laporan.index');
 
-Route::middleware(['auth', 'role:admin,super_admin,tim_aset,kasubbag_umum_perencanaan,timaset_persediaan,tim_aset_persediaan,aset-persediaan'])->group(function () {
+Route::middleware(['auth'])->group(function () {
+    Route::get('/laporan-dokumen/{jenis}/export-word', [ReportDocumentController::class, 'exportWord'])
+        ->name('laporan-dokumen.export-word');
+    Route::get('/laporan-dokumen/{jenis}/export-pdf', [ReportDocumentController::class, 'exportPdf'])
+        ->name('laporan-dokumen.export-pdf');
     Route::post('/laporan-dokumen/{jenis}', [ReportDocumentController::class, 'store'])
         ->name('laporan-dokumen.store');
     Route::patch('/laporan-dokumen/file/{document}/berita-acara', [ReportDocumentController::class, 'completeBeritaAcara'])

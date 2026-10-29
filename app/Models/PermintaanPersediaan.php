@@ -14,6 +14,12 @@ class PermintaanPersediaan extends Model
     protected $fillable = [
         'nomor_permintaan',
         'pemohon_id',
+        'asal_permintaan',
+        'pemegang_aset_id',
+        'dicatat_oleh',
+        'nama_pemohon_snapshot',
+        'nip_pemohon_snapshot',
+        'unit_kerja_snapshot',
         'tanggal_permintaan',
         'keperluan',
         'status',
@@ -32,6 +38,16 @@ class PermintaanPersediaan extends Model
     public function pemohon(): BelongsTo
     {
         return $this->belongsTo(User::class, 'pemohon_id');
+    }
+
+    public function pemegangAset(): BelongsTo
+    {
+        return $this->belongsTo(AssetHolder::class, 'pemegang_aset_id');
+    }
+
+    public function dicatatOleh(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'dicatat_oleh');
     }
 
     public function verifier(): BelongsTo

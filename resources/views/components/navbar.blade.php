@@ -30,6 +30,7 @@
         'penghapusan-aset' => 'Penghapusan Aset',
         'laporan' => 'Laporan',
         'users' => 'Manajemen User',
+        'pemegang-aset' => 'Data Pegawai',
         'roles' => 'Manajemen Role',
         'profile' => 'Profil',
         'super-admin' => 'Kontrol Sistem',

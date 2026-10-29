@@ -8,10 +8,12 @@
     use App\Enums\WorkUnit;
 
     $role = auth()->user()?->role;
-    $canCreateLoan = in_array($role, [UserRole::AdminBidang->value, UserRole::SuperAdmin->value], true);
-    $canApproveLoan = in_array($role, [UserRole::TimAset->value, UserRole::KasubbagUmumPerencanaan->value], true);
-    $canHandOverLoan = $role === UserRole::TimAset->value;
-    $canReturnLoan = $role === UserRole::TimAset->value;
+    $canCreateLoan = auth()->user()?->hasPermission('peminjaman.create') ?? false;
+    $canVerifyLoan = auth()->user()?->hasPermission('peminjaman.verify') ?? false;
+    $canApproveLoan = $role === UserRole::KasubbagUmumPerencanaan->value;
+    $canHandOverLoan = auth()->user()?->hasPermission('peminjaman.handover') ?? false;
+    $canExportLoan = auth()->user()?->hasPermission('peminjaman.export') ?? false;
+    $canReturnLoan = auth()->user()?->hasPermission('peminjaman.return') ?? false;
     $canDeleteLoan = $role === UserRole::SuperAdmin->value;
     $numberStart = ($loans->currentPage() - 1) * $loans->perPage();
     $selectedPerPage = (int) request('per_page', $loans->perPage());
@@ -90,7 +92,9 @@
                 <a class="page-action-button inline-flex min-h-[42px] items-center justify-center rounded-[9px] border border-[#dbe3eb] bg-white px-4 text-[10px] font-bold text-[#5e7084] no-underline transition hover:border-[#b8c6d6] hover:bg-[#f8fafc]" href="{{ route($indexRouteName ?? 'web.peminjaman.index') }}">Reset</a>
             @endif
             <div class="ml-auto flex flex-wrap items-center gap-3 max-[920px]:ml-0">
-                <x-export-dropdown dataset="peminjaman" />
+                @if ($canExportLoan)
+                    <x-export-dropdown dataset="peminjaman" />
+                @endif
             </div>
         </form>
 
@@ -261,6 +265,7 @@
     @foreach ($loans as $loan)
         @include('peminjaman.partials.detail-modal', [
             'loan' => $loan,
+            'canVerifyLoan' => $canVerifyLoan,
             'canApproveLoan' => $canApproveLoan,
             'canHandOverLoan' => $canHandOverLoan,
             'canReturnLoan' => $canReturnLoan,

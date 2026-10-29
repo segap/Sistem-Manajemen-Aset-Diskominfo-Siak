@@ -14,7 +14,7 @@ return new class extends Migration
 
         Schema::create('pengadaan_aset', function (Blueprint $table): void {
             $table->id();
-            $table->foreignId('pengadaan_id')->constrained('pengadaan')->cascadeOnDelete();
+            $table->foreignId('pengadaan_id')->constrained('pengadaan')->restrictOnDelete();
             $table->foreignId('aset_id')->constrained('aset')->restrictOnDelete();
             $table->timestamps();
 

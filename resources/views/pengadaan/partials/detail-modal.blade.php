@@ -1,13 +1,12 @@
 @php
     use App\Enums\ProcurementStatus;
-    use App\Enums\UserRole;
     use Illuminate\Support\Facades\Storage;
 
-    $role = auth()->user()?->role;
-    $canReceive = in_array($role, [UserRole::Admin->value, UserRole::TimAset->value, UserRole::SuperAdmin->value], true);
-    $canVerify = in_array($role, [UserRole::TimAset->value, UserRole::SuperAdmin->value], true);
+    $canReceive = auth()->user()?->hasPermission('pengadaan.receive') ?? false;
+    $canVerify = auth()->user()?->hasPermission('pengadaan.verify') ?? false;
     $total = (float) $procurement->harga_satuan * (int) $procurement->jumlah_dipesan;
     $receiptProofUrl = $procurement->bukti_penerimaan ? Storage::disk('public')->url($procurement->bukti_penerimaan) : null;
+    $procurementAssets = $procurement->relatedAssetsForDisplay();
 @endphp
 
 <div class="fixed inset-0 z-80 hidden place-items-center overflow-y-auto bg-[rgb(5_22_38_/_48%)] p-6 animate-[modalBackdropIn_.2s_ease-out_both] max-[580px]:p-3" data-modal="detail-procurement-{{ $procurement->id }}" role="presentation">
@@ -52,6 +51,25 @@
                 @include('pengadaan.partials.detail-item', ['label' => 'Tanggal verifikasi', 'value' => $formatDateTime($procurement->tanggal_verifikasi)])
                 @include('pengadaan.partials.detail-item', ['label' => 'Aset terkait', 'value' => $procurement->asset ? $procurement->asset->display_code.' - '.$procurement->asset->nama_aset : '-'])
             </div>
+
+            <section class="grid gap-3 rounded-[12px] border border-[#dfe7f0] bg-white p-4">
+                <div>
+                    <h3 class="m-0 text-[13px] font-extrabold text-[#0b2b50]">Aset Hasil Pengadaan</h3>
+                    <p class="mb-0 mt-1 text-[10px] text-[#718096]">Aset yang tercatat dari proses verifikasi pengadaan ini.</p>
+                </div>
+                @if ($procurementAssets->isEmpty())
+                    <p class="m-0 rounded-[9px] bg-[#f8fafc] px-3 py-2.5 text-[10px] font-medium text-[#718096]">Belum ada aset hasil pengadaan.</p>
+                @else
+                    <div class="grid overflow-hidden rounded-[10px] border border-[#e5ebf1] sm:grid-cols-2">
+                        @foreach ($procurementAssets as $asset)
+                            <div class="grid gap-1 border-b border-[#e5ebf1] px-3 py-2.5 last:border-b-0 sm:[&:nth-last-child(2):nth-child(odd)]:border-b-0 sm:[&:nth-child(odd)]:border-r">
+                                <strong class="text-[10px] font-extrabold text-[#33485d]">{{ $asset->display_code }} · {{ $asset->nama_aset }}</strong>
+                                <span class="text-[9px] text-[#718096]">{{ $asset->kondisi?->label() ?: '-' }} · {{ $asset->lokasi_penyimpanan ?: '-' }}</span>
+                            </div>
+                        @endforeach
+                    </div>
+                @endif
+            </section>
 
             @include('pengadaan.partials.detail-note', ['title' => 'Catatan penerimaan', 'body' => $procurement->catatan_penerimaan])
             @if ($receiptProofUrl)

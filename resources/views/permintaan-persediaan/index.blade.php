@@ -4,18 +4,22 @@
 
 @php
     use App\Enums\PermintaanPersediaanStatus;
-    use App\Enums\UserRole;
     use App\Enums\WorkUnit;
 
-    $role = auth()->user()?->role;
-    $canCreate = in_array($role, [UserRole::AdminBidang->value, UserRole::SuperAdmin->value], true);
-    $canProcess = in_array($role, [UserRole::TimAsetPersediaan->value, 'tim_aset_persediaan', UserRole::SuperAdmin->value], true);
+    $canCreate = auth()->user()?->hasPermission('permintaan.create') ?? false;
+    $canExport = auth()->user()?->hasPermission('permintaan.export') ?? false;
+    $canVerify = auth()->user()?->hasPermission('permintaan.verify') ?? false;
+    $canHandover = auth()->user()?->hasPermission('permintaan.handover') ?? false;
     $numberStart = ($requests->currentPage() - 1) * $requests->perPage();
     $selectedPerPage = (int) request('per_page', $requests->perPage());
     $formatDate = fn ($date) => $date ? $date->translatedFormat('d M Y') : '-';
     $formatDateTime = fn ($date) => $date ? $date->translatedFormat('d M Y H:i') : '-';
     $workUnitLabel = fn (?string $value) => WorkUnit::labelFor($value);
     $nipLabel = fn (?string $value) => $value ? 'NIP. '.$value : 'NIP belum dicatat';
+    $applicantName = fn ($requestItem) => $requestItem->nama_pemohon_snapshot ?: $requestItem->pemohon?->name ?: '-';
+    $applicantWorkUnit = fn ($requestItem) => $requestItem->unit_kerja_snapshot ?: $requestItem->pemohon?->work_unit;
+    $applicantNip = fn ($requestItem) => $requestItem->nip_pemohon_snapshot ?: $requestItem->pemohon?->nip;
+    $recordedByName = fn ($requestItem) => $requestItem->dicatatOleh?->name ?: $requestItem->pemohon?->name ?: '-';
     $statusClass = fn ($status) => match ($status instanceof PermintaanPersediaanStatus ? $status->value : $status) {
         'disetujui_tim_aset_persediaan' => 'status-diajukan',
         'ditolak_tim_aset_persediaan' => 'status-ditolak',
@@ -63,7 +67,9 @@
             @if (request()->hasAny(['search', 'status']))
                 <a class="page-action-button inline-flex min-h-[38px] items-center justify-center rounded-[9px] border border-[#dbe3eb] bg-white px-3.5 text-[10px] font-bold text-[#5e7084] no-underline transition hover:border-[#b8c6d6] hover:bg-[#f8fafc]" href="{{ route('permintaan-persediaan.index') }}">Reset</a>
             @endif
-            <x-export-dropdown dataset="permintaan-persediaan" />
+            @if ($canExport)
+                <x-export-dropdown dataset="permintaan-persediaan" />
+            @endif
         </form>
 
         <div class="table-scroll">
@@ -87,8 +93,11 @@
                             <td><span class="code-badge">{{ $requestItem->nomor_permintaan }}</span></td>
                             <td>{{ $formatDate($requestItem->tanggal_permintaan) }}</td>
                             <td>
-                                <strong>{{ $requestItem->pemohon?->name ?: '-' }}</strong>
-                                <small class="cell-subtitle">{{ $workUnitLabel($requestItem->pemohon?->work_unit) }}</small>
+                                <strong>{{ $applicantName($requestItem) }}</strong>
+                                <small class="cell-subtitle">{{ $workUnitLabel($applicantWorkUnit($requestItem)) }}</small>
+                                @if ($requestItem->asal_permintaan === 'pegawai_lain')
+                                    <small class="cell-subtitle">Dicatat oleh: {{ $recordedByName($requestItem) }}</small>
+                                @endif
                             </td>
                             <td>{{ $requestItem->details->count() }} Barang</td>
                             <td>{{ str($requestItem->details->pluck('justifikasi_kebutuhan')->filter()->implode('; ') ?: $requestItem->keperluan)->limit(55) }}</td>
@@ -140,12 +149,49 @@
                 <header class="flex min-h-[83px] items-center justify-between border-b border-[#edf1f5] px-[22px] py-[17px]">
                     <div>
                         <h2 class="m-0 text-xl font-extrabold text-[#0b2b50]">Buat Permintaan Barang</h2>
-                        <p class="m-0 mt-1 text-[10px] font-semibold text-[#7c8ca1]">Pemohon: {{ auth()->user()?->name }}</p>
+                        <p class="m-0 mt-1 text-[10px] font-semibold text-[#7c8ca1]">Pilih asal dan identitas pemohon sebelum menambahkan barang.</p>
                     </div>
                     <button class="inline-flex h-[34px] w-[34px] items-center justify-center rounded-[9px] border-0 bg-[#f2f5f8] text-[#8291a2]" type="button" data-modal-close aria-label="Tutup"><svg class="h-[18px] w-[18px] fill-none stroke-current stroke-[2.4] [stroke-linecap:round]" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18" /></svg></button>
                 </header>
                 <form class="grid gap-[17px] p-[22px]" method="POST" action="{{ route('permintaan-persediaan.store') }}" data-submit-loading data-supply-request-form>
                     @csrf
+                    <section class="rounded-[12px] border border-[#e3e9f0] bg-[#fbfdff] p-4" data-request-origin-section>
+                        <div class="mb-3">
+                            <h3 class="m-0 text-[12px] font-extrabold text-[#0b2b50]">Asal Permintaan</h3>
+                            <p class="m-0 mt-1 text-[10px] text-[#718095]">Tentukan pihak yang membutuhkan barang persediaan.</p>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2 max-[580px]:grid-cols-1" role="radiogroup" aria-label="Asal Permintaan">
+                            <label class="flex cursor-pointer items-center gap-2 rounded-[9px] border border-[#e7eef5] bg-white px-3 py-2.5 text-[10px] font-bold text-[#405267]">
+                                <input class="h-4 w-4 border-[#9eb0c4] text-[#146bb5] focus:ring-[#146bb5]" type="radio" name="asal_permintaan" value="sendiri" checked data-request-origin>
+                                Permintaan Sendiri
+                            </label>
+                            <label class="flex cursor-pointer items-center gap-2 rounded-[9px] border border-[#e7eef5] bg-white px-3 py-2.5 text-[10px] font-bold text-[#405267]">
+                                <input class="h-4 w-4 border-[#9eb0c4] text-[#146bb5] focus:ring-[#146bb5]" type="radio" name="asal_permintaan" value="pegawai_lain" data-request-origin>
+                                Permintaan Pegawai Lain
+                            </label>
+                        </div>
+                        <div class="mt-3 grid gap-2 rounded-[9px] border border-[#edf2f7] bg-white p-3" data-self-applicant>
+                            <span class="text-[9px] font-bold uppercase tracking-wide text-[#718095]">Pemohon</span>
+                            <strong class="text-[11px] text-[#0b2b50]">{{ auth()->user()?->name }}</strong>
+                            <span class="text-[10px] text-[#66758a]">Unit Kerja: {{ $workUnitLabel(auth()->user()?->work_unit) }}</span>
+                        </div>
+                        <div class="mt-3 hidden grid gap-3" data-other-applicant>
+                            <p class="m-0 text-[10px] text-[#66758a]">Dicatat oleh: <strong class="text-[#405267]">{{ auth()->user()?->name }}</strong></p>
+                            <label class="grid gap-[7px] text-[11px] font-bold text-[#405267]">
+                                <span>Nama Pegawai</span>
+                                <select class="h-[42px] rounded-[9px] border border-[#dce4ec] bg-white px-3 text-[10px] text-[#34465a] outline-0" name="pemegang_aset_id" data-request-employee-select>
+                                    <option value="">-- Pilih Pegawai --</option>
+                                    @foreach ($activeEmployees as $employee)
+                                        <option value="{{ $employee->id }}" data-work-unit="{{ $workUnitLabel($employee->unit_kerja) }}">{{ $employee->nama_pegawai }}</option>
+                                    @endforeach
+                                </select>
+                            </label>
+                            <label class="grid gap-[7px] text-[11px] font-bold text-[#405267]">
+                                <span>Unit Kerja</span>
+                                <input class="h-[42px] rounded-[9px] border border-[#dce4ec] bg-[#f4f7fa] px-3 text-[10px] text-[#66758a]" type="text" value="-" readonly data-request-employee-unit>
+                            </label>
+                        </div>
+                    </section>
                     <div class="grid gap-3" data-supply-items>
                         <div class="min-w-0 rounded-[14px] border border-[#e5edf5] bg-[#fbfdff] p-4" data-supply-row>
                             <div class="mb-3 flex items-center justify-between gap-3">
@@ -196,9 +242,10 @@
                 </header>
                 <div class="grid gap-[17px] p-[22px]">
                     <div class="grid grid-cols-2 gap-px overflow-hidden rounded-[11px] border border-[#e3e9f0] bg-[#e3e9f0] max-[580px]:grid-cols-1">
-                        @include('peminjaman.partials.detail-item', ['label' => 'Pemohon', 'value' => $requestItem->pemohon?->name])
-                        @include('peminjaman.partials.detail-item', ['label' => 'Unit Kerja', 'value' => $workUnitLabel($requestItem->pemohon?->work_unit)])
-                        @include('peminjaman.partials.detail-item', ['label' => 'NIP', 'value' => $requestItem->pemohon?->nip ?: '-'])
+                        @include('peminjaman.partials.detail-item', ['label' => 'Pemohon', 'value' => $applicantName($requestItem)])
+                        @include('peminjaman.partials.detail-item', ['label' => 'Unit Kerja', 'value' => $workUnitLabel($applicantWorkUnit($requestItem))])
+                        @include('peminjaman.partials.detail-item', ['label' => 'NIP', 'value' => $applicantNip($requestItem) ?: '-'])
+                        @include('peminjaman.partials.detail-item', ['label' => 'Dicatat oleh', 'value' => $recordedByName($requestItem)])
                         @include('peminjaman.partials.detail-item', ['label' => 'Tanggal Permintaan', 'value' => $formatDateTime($requestItem->tanggal_permintaan)])
                         @include('peminjaman.partials.detail-item', ['label' => 'Status', 'value' => $statusLabel($requestItem->status)])
                         @include('peminjaman.partials.detail-item', ['label' => 'Diverifikasi oleh', 'value' => $requestItem->verifier?->name ?: '-'])
@@ -240,7 +287,7 @@
                             </tbody>
                         </table>
                     </div>
-                    @if ($canProcess && $requestItem->status === PermintaanPersediaanStatus::Submitted)
+                    @if ($canVerify && $requestItem->status === PermintaanPersediaanStatus::Submitted)
                         <form class="grid gap-3 rounded-[12px] border border-[#e3e9f0] p-4" method="POST" action="{{ route('permintaan-persediaan.verify', $requestItem) }}" data-submit-loading>
                             @csrf
                             @method('PATCH')
@@ -262,7 +309,7 @@
                             </div>
                         </form>
                     @endif
-                    @if ($canProcess && $requestItem->status === PermintaanPersediaanStatus::Approved)
+                    @if ($canHandover && $requestItem->status === PermintaanPersediaanStatus::Approved)
                         <form class="flex flex-wrap items-center justify-between gap-3 rounded-[12px] border border-[#d7eadf] bg-[#f6fffa] p-4" method="POST" action="{{ route('permintaan-persediaan.handover', $requestItem) }}" data-submit-loading>
                             @csrf
                             @method('PATCH')
@@ -286,7 +333,34 @@
             const container = form.querySelector('[data-supply-items]')
             const template = container?.querySelector('[data-supply-row]')
             const addButton = form.querySelector('[data-add-supply-row]')
+            const originInputs = Array.from(form.querySelectorAll('[data-request-origin]'))
+            const selfApplicant = form.querySelector('[data-self-applicant]')
+            const otherApplicant = form.querySelector('[data-other-applicant]')
+            const employeeSelect = form.querySelector('[data-request-employee-select]')
+            const employeeUnit = form.querySelector('[data-request-employee-unit]')
             let index = 1
+
+            const clearEmployee = () => {
+                if (employeeSelect) employeeSelect.value = ''
+                if (employeeUnit) employeeUnit.value = '-'
+            }
+
+            const updateEmployeeWorkUnit = () => {
+                const selectedEmployee = employeeSelect?.selectedOptions?.[0]
+                if (employeeUnit) employeeUnit.value = selectedEmployee?.dataset.workUnit || '-'
+            }
+
+            const setOrigin = () => {
+                const isOtherEmployee = originInputs.find((input) => input.checked)?.value === 'pegawai_lain'
+                selfApplicant?.classList.toggle('hidden', isOtherEmployee)
+                otherApplicant?.classList.toggle('hidden', !isOtherEmployee)
+                if (!isOtherEmployee) clearEmployee()
+                if (isOtherEmployee) employeeSelect?.focus()
+            }
+
+            originInputs.forEach((input) => input.addEventListener('change', setOrigin))
+            employeeSelect?.addEventListener('change', updateEmployeeWorkUnit)
+            setOrigin()
 
             const refreshRow = (row) => {
                 const select = row.querySelector('[data-supply-select]')

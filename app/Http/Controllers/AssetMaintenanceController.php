@@ -43,7 +43,7 @@ class AssetMaintenanceController extends Controller
         $perPage = min(max($request->integer('per_page', 10), 1), 100);
 
         $maintenances = AssetMaintenance::query()
-            ->with(['asset.category', 'asset.kodeBarang', 'applicant', 'verifier', 'completedBy', 'documents'])
+            ->with(['asset.category', 'asset.kodeBarang', 'applicant', 'verifier', 'completedBy', 'documents', 'approvalHistories'])
             ->when($isApplicant, fn (Builder $query) => $query->where('pemohon_id', $request->user()->id))
             ->when($request->filled('search'), function (Builder $query) use ($request): void {
                 $search = $request->string('search')->toString();
@@ -67,6 +67,10 @@ class AssetMaintenanceController extends Controller
             'maintenanceOptions' => $this->maintenanceOptions(),
             'histories' => $maintenances->getCollection()
                 ->mapWithKeys(fn (AssetMaintenance $maintenance) => [$maintenance->id => app(RiwayatPersetujuanService::class)->timeline(self::HISTORY_TYPE, $maintenance)]),
+            'deletableMaintenanceIds' => $maintenances->getCollection()
+                ->filter(fn (AssetMaintenance $maintenance): bool => $maintenance->isSafelyDeletable())
+                ->pluck('id')
+                ->all(),
         ]);
     }
 
@@ -127,6 +131,8 @@ class AssetMaintenanceController extends Controller
 
     public function verify(VerifyAssetMaintenanceRequest $request, AssetMaintenance $assetMaintenance): RedirectResponse
     {
+        $this->authorizeMaintenanceWorkflow($request, 'pemeliharaan.verify');
+
         if ($assetMaintenance->status !== AssetMaintenanceStatus::Submitted) {
             throw ValidationException::withMessages(['status' => 'Pengajuan ini sudah diproses.']);
         }
@@ -158,25 +164,35 @@ class AssetMaintenanceController extends Controller
 
     public function start(Request $request, AssetMaintenance $assetMaintenance): RedirectResponse
     {
-        $this->authorizeAssetTeam($request);
+        $this->authorizeMaintenanceWorkflow($request, 'pemeliharaan.start');
 
-        if ($assetMaintenance->status !== AssetMaintenanceStatus::Approved) {
-            throw ValidationException::withMessages(['status' => 'Pemeliharaan hanya dapat dimulai setelah disetujui Tim Aset.']);
-        }
+        DB::transaction(function () use ($request, $assetMaintenance): void {
+            $assetMaintenance = AssetMaintenance::query()
+                ->lockForUpdate()
+                ->findOrFail($assetMaintenance->getKey());
 
-        $assetMaintenance->update([
-            'status' => AssetMaintenanceStatus::InProgress->value,
-            'tanggal_mulai' => now(),
-        ]);
+            if ($assetMaintenance->status !== AssetMaintenanceStatus::Approved) {
+                throw ValidationException::withMessages(['status' => 'Pemeliharaan hanya dapat dimulai setelah disetujui Tim Aset.']);
+            }
 
-        app(RiwayatPersetujuanService::class)->record(self::HISTORY_TYPE, $assetMaintenance, 'mulai_pemeliharaan', 'dimulai', null, $request->user());
+            $assetMaintenance->update([
+                'status' => AssetMaintenanceStatus::InProgress->value,
+                'tanggal_mulai' => now(),
+            ]);
+
+            app(RiwayatPersetujuanService::class)->record(self::HISTORY_TYPE, $assetMaintenance, 'mulai_pemeliharaan', 'dimulai', null, $request->user());
+        });
 
         return back()->with('success', 'Pemeliharaan aset dimulai.');
     }
 
     public function update(UpdateAssetMaintenanceRequest $request, AssetMaintenance $assetMaintenance): RedirectResponse
     {
-        $this->authorizeAssetTeam($request);
+        $this->authorizeMaintenanceUpdate($request, $assetMaintenance);
+
+        if ($assetMaintenance->status === AssetMaintenanceStatus::Rejected) {
+            throw ValidationException::withMessages(['status' => 'Data pemeliharaan yang ditolak tidak dapat diubah.']);
+        }
 
         $paths = [];
         $documentationPaths = [];
@@ -199,6 +215,14 @@ class AssetMaintenanceController extends Controller
             }
 
             DB::transaction(function () use ($request, $assetMaintenance, $paths, $documentationPaths): void {
+                $assetMaintenance = AssetMaintenance::query()
+                    ->lockForUpdate()
+                    ->findOrFail($assetMaintenance->getKey());
+
+                if ($assetMaintenance->status === AssetMaintenanceStatus::Rejected) {
+                    throw ValidationException::withMessages(['status' => 'Data pemeliharaan yang ditolak tidak dapat diubah.']);
+                }
+
                 $data = $request->safe()->except(['foto_sebelum', 'foto_setelah', 'invoice', 'dokumentasi_servis', 'video_dokumentasi']);
 
                 if ($assetMaintenance->status === AssetMaintenanceStatus::Submitted) {
@@ -277,9 +301,7 @@ class AssetMaintenanceController extends Controller
 
     public function complete(CompleteAssetMaintenanceRequest $request, AssetMaintenance $assetMaintenance, AssetConditionStockService $conditionStockService): RedirectResponse
     {
-        if ($assetMaintenance->status !== AssetMaintenanceStatus::InProgress) {
-            throw ValidationException::withMessages(['status' => 'Pemeliharaan hanya dapat diselesaikan saat status Sedang Dipelihara.']);
-        }
+        $this->authorizeMaintenanceWorkflow($request, 'pemeliharaan.complete');
 
         $paths = [];
 
@@ -299,7 +321,16 @@ class AssetMaintenanceController extends Controller
             }
 
             DB::transaction(function () use ($request, $assetMaintenance, $conditionStockService, $paths, $documentationPaths): void {
-                $assetMaintenance->load('asset.conditionStocks');
+                $assetMaintenance = AssetMaintenance::query()
+                    ->lockForUpdate()
+                    ->findOrFail($assetMaintenance->getKey());
+
+                if ($assetMaintenance->status !== AssetMaintenanceStatus::InProgress) {
+                    throw ValidationException::withMessages(['status' => 'Pemeliharaan hanya dapat diselesaikan saat status Sedang Dipelihara.']);
+                }
+
+                $asset = Asset::query()->lockForUpdate()->findOrFail($assetMaintenance->asset_id);
+                $assetMaintenance->setRelation('asset', $asset);
                 $before = $assetMaintenance->kondisi_sebelum->value;
                 $after = $request->string('kondisi_setelah')->toString();
                 $quantity = max(1, (int) ($assetMaintenance->jumlah_dipelihara ?: 1));
@@ -336,13 +367,13 @@ class AssetMaintenanceController extends Controller
                 ]);
 
                 if ($quantity > 0 && $before !== $after) {
-                    $conditionStockService->transfer($assetMaintenance->asset, $before, $after, $quantity, 'Hasil pemeliharaan #'.$assetMaintenance->id, $request->user()->id, $request->input('link_drive_dokumentasi'));
+                    $conditionStockService->transfer($asset, $before, $after, $quantity, 'Hasil pemeliharaan #'.$assetMaintenance->id, $request->user()->id, $request->input('link_drive_dokumentasi'));
                 } else {
-                    $assetMaintenance->asset->update(['kondisi' => $after]);
+                    $asset->update(['kondisi' => $after]);
                 }
 
                 if ($after === AssetCondition::Good->value && $paths['foto_setelah']) {
-                    $assetMaintenance->asset->update(['path_foto' => $paths['foto_setelah']]);
+                    $asset->update(['path_foto' => $paths['foto_setelah']]);
                 }
 
                 if ($paths['invoice']) {
@@ -374,7 +405,7 @@ class AssetMaintenanceController extends Controller
 
     public function updateReportData(UpdateMaintenanceReportDataRequest $request, AssetMaintenance $assetMaintenance): RedirectResponse
     {
-        abort_unless($this->canView($request, $assetMaintenance), 403);
+        $this->authorizeMaintenanceWorkflow($request, 'pemeliharaan.report.update');
         if ($assetMaintenance->status !== AssetMaintenanceStatus::Completed) {
             throw ValidationException::withMessages(['status' => 'Data Berita Acara hanya dapat dilengkapi setelah pemeliharaan selesai.']);
         }
@@ -396,19 +427,41 @@ class AssetMaintenanceController extends Controller
 
     public function destroy(Request $request, AssetMaintenance $assetMaintenance): RedirectResponse
     {
-        $this->authorizeAssetTeam($request);
+        $this->authorizeSuperAdmin($request);
+        $paths = collect();
 
-        $assetMaintenance->load('documents');
-        $paths = collect([
-            $assetMaintenance->foto_sebelum,
-            $assetMaintenance->foto_setelah,
-        ])
-            ->merge($assetMaintenance->documents->pluck('path_file'))
-            ->filter()
-            ->unique()
-            ->values();
+        DB::transaction(function () use ($assetMaintenance, &$paths): void {
+            $assetMaintenance = AssetMaintenance::query()
+                ->lockForUpdate()
+                ->findOrFail($assetMaintenance->getKey());
 
-        DB::transaction(function () use ($assetMaintenance): void {
+            $documents = $assetMaintenance->documents()
+                ->lockForUpdate()
+                ->get();
+            $histories = $assetMaintenance->approvalHistories()
+                ->lockForUpdate()
+                ->get();
+
+            $assetMaintenance->setRelation('documents', $documents);
+            $assetMaintenance->setRelation('approvalHistories', $histories);
+
+            if ($reason = $assetMaintenance->deletionBlockReason()) {
+                throw ValidationException::withMessages(['status' => $reason]);
+            }
+
+            $paths = collect([
+                $assetMaintenance->foto_sebelum,
+                $assetMaintenance->foto_setelah,
+            ])
+                ->merge($assetMaintenance->documents->pluck('path_file'))
+                ->filter()
+                ->unique()
+                ->values();
+
+            $assetMaintenance->approvalHistories()
+                ->where('tahap', 'pengajuan')
+                ->where('status', 'dibuat')
+                ->delete();
             $assetMaintenance->documents()->delete();
             $assetMaintenance->delete();
         });
@@ -433,7 +486,7 @@ class AssetMaintenanceController extends Controller
 
     public function downloadDocument(Request $request, AssetMaintenanceDocument $document)
     {
-        abort_unless($this->canView($request, $document->maintenance), 403);
+        abort_unless($this->canDownload($request, $document->maintenance), 403);
         abort_unless(Storage::disk('public')->exists($document->path_file), 404);
 
         return Storage::disk('public')->download($document->path_file, $document->nama_file ?: basename($document->path_file));
@@ -441,7 +494,7 @@ class AssetMaintenanceController extends Controller
 
     public function pdf(Request $request, AssetMaintenance $assetMaintenance): Response
     {
-        abort_unless($this->canView($request, $assetMaintenance), 403);
+        abort_unless($this->canDownload($request, $assetMaintenance), 403);
         if ($assetMaintenance->status !== AssetMaintenanceStatus::Completed) {
             throw ValidationException::withMessages(['status' => 'Berita Acara hanya dapat dibuat setelah pemeliharaan selesai.']);
         }
@@ -462,7 +515,7 @@ class AssetMaintenanceController extends Controller
 
     public function word(Request $request, AssetMaintenance $assetMaintenance, MaintenanceReportWordService $reportService): BinaryFileResponse|RedirectResponse
     {
-        abort_unless($this->canView($request, $assetMaintenance), 403);
+        abort_unless($this->canDownload($request, $assetMaintenance), 403);
         if ($assetMaintenance->status !== AssetMaintenanceStatus::Completed) {
             throw ValidationException::withMessages(['status' => 'Berita Acara hanya dapat dibuat setelah pemeliharaan selesai.']);
         }
@@ -562,9 +615,25 @@ class AssetMaintenanceController extends Controller
             ->sum(DB::raw('COALESCE(jumlah_dipelihara, 1)'));
     }
 
-    private function authorizeAssetTeam(Request $request): void
+    private function authorizeMaintenanceWorkflow(Request $request, string $permission): void
     {
-        abort_unless(in_array($request->user()?->role, ['tim_aset', 'super_admin'], true), 403);
+        abort_unless($request->user()?->hasPermission($permission), 403);
+        abort_if($request->user()?->role === 'admin_bidang', 403);
+    }
+
+    private function authorizeMaintenanceUpdate(Request $request, AssetMaintenance $maintenance): void
+    {
+        abort_unless($request->user()?->hasPermission('pemeliharaan.update'), 403);
+
+        abort_if(
+            $request->user()?->role === 'admin_bidang' && $maintenance->pemohon_id !== $request->user()?->id,
+            403,
+        );
+    }
+
+    private function authorizeSuperAdmin(Request $request): void
+    {
+        abort_unless($request->user()?->role === 'super_admin', 403);
     }
 
     private function canView(Request $request, AssetMaintenance $maintenance): bool
@@ -573,5 +642,13 @@ class AssetMaintenanceController extends Controller
 
         return in_array($role, ['admin', 'tim_aset', 'kasubbag_umum_perencanaan', 'super_admin'], true)
             || ($role === 'admin_bidang' && $maintenance->pemohon_id === $request->user()?->id);
+    }
+
+    private function canDownload(Request $request, AssetMaintenance $maintenance): bool
+    {
+        $user = $request->user();
+
+        return ($user?->hasPermission('pemeliharaan.download') ?? false)
+            && ($user->role !== 'admin_bidang' || $maintenance->pemohon_id === $user->id);
     }
 }

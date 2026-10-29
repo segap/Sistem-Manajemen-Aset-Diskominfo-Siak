@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\KodeBarang;
 use App\Models\KodeLokasi;
 use App\Models\KodePersediaan;
+use App\Models\StockOpnameItem;
 use App\Services\KodefikasiImportService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -37,8 +38,7 @@ class KodefikasiController extends Controller
 
     public function store(Request $request, string $type): RedirectResponse
     {
-        $this->ensureCanManage($request);
-        $type = $this->normalizeType($type);
+        $type = $this->resolveType($type);
         $model = $this->modelClass($type);
 
         $model::query()->create($this->validatedPayload($request, $type));
@@ -48,8 +48,7 @@ class KodefikasiController extends Controller
 
     public function update(Request $request, string $type, int $id): RedirectResponse
     {
-        $this->ensureCanManage($request);
-        $type = $this->normalizeType($type);
+        $type = $this->resolveType($type);
         $model = $this->modelClass($type);
         $item = $model::query()->findOrFail($id);
 
@@ -60,17 +59,22 @@ class KodefikasiController extends Controller
 
     public function destroy(Request $request, string $type, int $id): RedirectResponse
     {
-        $this->ensureCanManage($request);
-        $model = $this->modelClass($this->normalizeType($type));
-        $model::query()->findOrFail($id)->delete();
+        $type = $this->resolveType($type);
+        $model = $this->modelClass($type);
+        $item = $model::query()->findOrFail($id);
+
+        if ($message = $this->deletionBlockedMessage($type, $item)) {
+            return back()->with('error', $message);
+        }
+
+        $item->delete();
 
         return back()->with('success', 'Data kodefikasi berhasil dihapus.');
     }
 
     public function import(Request $request, string $type, KodefikasiImportService $service): RedirectResponse
     {
-        $this->ensureCanManage($request);
-        $type = $this->normalizeType($type);
+        $type = $this->resolveType($type);
         $request->validate([
             'file' => ['required', 'file', 'extensions:xlsx,xls,csv', 'max:10240'],
         ], [
@@ -89,7 +93,7 @@ class KodefikasiController extends Controller
 
     public function template(string $type)
     {
-        $type = $this->normalizeType($type);
+        $type = $this->resolveType($type);
         $headers = match ($type) {
             'kode_lokasi' => ['kode_lokasi', 'nama_lokasi', 'keterangan'],
             'kode_persediaan' => ['kode_barang', 'akun', 'kelompok', 'jenis', 'objek', 'rincian_objek', 'sub_rincian_objek', 'sub_sub_rincian_objek', 'nama_barang'],
@@ -191,22 +195,42 @@ class KodefikasiController extends Controller
         ]);
     }
 
-    private function ensureCanManage(Request $request): void
-    {
-        abort_unless(in_array($request->user()?->role, ['admin', 'super_admin'], true), 403);
-    }
-
     private function normalizeTab(string $tab): string
     {
         return in_array($tab, ['kode-barang', 'kode-persediaan', 'kode-lokasi'], true) ? $tab : 'kode-barang';
     }
 
-    private function normalizeType(string $type): string
+    private function resolveType(string $type): string
     {
         return match ($type) {
             'kode-persediaan', 'kode_persediaan' => 'kode_persediaan',
             'kode-lokasi', 'kode_lokasi' => 'kode_lokasi',
-            default => 'kode_barang',
+            'kode-barang', 'kode_barang' => 'kode_barang',
+            default => abort(404),
+        };
+    }
+
+    private function deletionBlockedMessage(string $type, Model $item): ?string
+    {
+        return match ($type) {
+            'kode_barang' => match (true) {
+                $item->children()->exists() => 'Kode Barang tidak dapat dihapus karena masih memiliki kode turunan.',
+                $item->aset()->exists() => 'Kode Barang tidak dapat dihapus karena masih digunakan oleh data aset.',
+                $item->detailKir()->exists() => 'Kode Barang tidak dapat dihapus karena masih digunakan oleh Detail KIR.',
+                StockOpnameItem::query()->where('kode_barang_id', $item->id)->exists() => 'Kode Barang tidak dapat dihapus karena masih digunakan oleh Stock Opname.',
+                default => null,
+            },
+            'kode_persediaan' => match (true) {
+                $item->children()->exists() => 'Kode Persediaan tidak dapat dihapus karena masih memiliki kode turunan.',
+                StockOpnameItem::query()->where('kode_persediaan_id', $item->id)->exists() => 'Kode Persediaan tidak dapat dihapus karena masih digunakan oleh Stock Opname.',
+                default => null,
+            },
+            'kode_lokasi' => match (true) {
+                $item->children()->exists() => 'Kode Lokasi tidak dapat dihapus karena masih memiliki kode turunan.',
+                $item->ruangan()->exists() => 'Kode Lokasi tidak dapat dihapus karena masih digunakan oleh data ruangan.',
+                $item->kir()->exists() => 'Kode Lokasi tidak dapat dihapus karena masih digunakan oleh KIR.',
+                default => null,
+            },
         };
     }
 

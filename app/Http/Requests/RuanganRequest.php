@@ -34,7 +34,11 @@ class RuanganRequest extends FormRequest
             ],
             'kode_lokasi_id' => ['nullable', 'integer', 'exists:kode_lokasi,id'],
             'nama_ruangan' => ['required', 'string', 'max:150'],
-            'penanggung_jawab_id' => ['nullable', 'integer', 'exists:users,id'],
+            'pemegang_aset_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('pemegang_aset', 'id')->where('is_active', true),
+            ],
             'keterangan' => ['nullable', 'string', 'max:3000'],
             'status' => ['required', Rule::enum(RuanganStatus::class)],
         ];
@@ -46,7 +50,7 @@ class RuanganRequest extends FormRequest
             'kode_ruangan' => strtoupper(trim((string) $this->input('kode_ruangan'))),
             'nama_ruangan' => trim((string) $this->input('nama_ruangan')),
             'kode_lokasi_id' => blank($this->input('kode_lokasi_id')) ? null : $this->input('kode_lokasi_id'),
-            'penanggung_jawab_id' => blank($this->input('penanggung_jawab_id')) ? null : $this->input('penanggung_jawab_id'),
+            'pemegang_aset_id' => blank($this->input('pemegang_aset_id')) ? null : $this->input('pemegang_aset_id'),
         ]);
     }
 
@@ -59,7 +63,7 @@ class RuanganRequest extends FormRequest
             'kode_ruangan.regex' => 'Kode ruangan hanya boleh huruf besar, angka, titik, garis miring, underscore, dan strip.',
             'kode_lokasi_id.exists' => 'Kode lokasi master tidak ditemukan.',
             'nama_ruangan.required' => 'Nama ruangan wajib diisi.',
-            'penanggung_jawab_id.exists' => 'Penanggung jawab tidak ditemukan.',
+            'pemegang_aset_id.exists' => 'Data pegawai tidak ditemukan atau tidak aktif.',
             'status.required' => 'Status ruangan wajib dipilih.',
             'status.enum' => 'Status ruangan tidak valid.',
         ];

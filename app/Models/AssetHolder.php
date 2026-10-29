@@ -19,6 +19,7 @@ class AssetHolder extends Model
         'unit_kerja',
         'jabatan',
         'nomor_hp',
+        'alamat',
         'foto_path',
         'nik',
         'ktp_path',

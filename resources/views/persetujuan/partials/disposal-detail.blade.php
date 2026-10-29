@@ -4,6 +4,7 @@
     $photoEvidences = $evidences->where('jenis', 'foto');
     $videoEvidences = $evidences->where('jenis', 'video');
     $conditionMutation = $data->relationLoaded('conditionMutation') ? $data->conditionMutation : null;
+    $canDownloadDisposal = auth()->user()?->hasPermission('penghapusan.download') ?? false;
 @endphp
 
 <div class="grid grid-cols-2 gap-px overflow-hidden rounded-[11px] border border-[#e3e9f0] bg-[#e3e9f0] max-[580px]:grid-cols-1">
@@ -47,9 +48,11 @@
                             <a class="grid h-[30px] flex-1 place-items-center rounded-[7px] border border-[#dbe3eb] bg-white text-[#146bb5] no-underline transition hover:border-[#b8c6d6] hover:bg-[#f8fafc]" href="{{ route('penghapusan-aset.bukti.preview', $evidence) }}" target="_blank" rel="noopener noreferrer" title="Lihat bukti" aria-label="Lihat bukti">
                                 <svg class="h-[14px] w-[14px] fill-none stroke-current stroke-[2.2] [stroke-linecap:round] [stroke-linejoin:round]" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" /><circle cx="12" cy="12" r="3" /></svg>
                             </a>
-                            <a class="grid h-[30px] flex-1 place-items-center rounded-[7px] border border-[#dbe3eb] bg-white text-[#5e7084] no-underline transition hover:border-[#b8c6d6] hover:bg-[#f8fafc]" href="{{ route('penghapusan-aset.bukti', $evidence) }}" title="Unduh bukti" aria-label="Unduh bukti">
-                                <svg class="h-[14px] w-[14px] fill-none stroke-current stroke-[2.2] [stroke-linecap:round] [stroke-linejoin:round]" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12" /><path d="m7 10 5 5 5-5" /><path d="M5 21h14" /></svg>
-                            </a>
+                            @if ($canDownloadDisposal)
+                                <a class="grid h-[30px] flex-1 place-items-center rounded-[7px] border border-[#dbe3eb] bg-white text-[#5e7084] no-underline transition hover:border-[#b8c6d6] hover:bg-[#f8fafc]" href="{{ route('penghapusan-aset.bukti', $evidence) }}" title="Unduh bukti" aria-label="Unduh bukti">
+                                    <svg class="h-[14px] w-[14px] fill-none stroke-current stroke-[2.2] [stroke-linecap:round] [stroke-linejoin:round]" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12" /><path d="m7 10 5 5 5-5" /><path d="M5 21h14" /></svg>
+                                </a>
+                            @endif
                         </div>
                     </div>
                 @endforeach
@@ -61,7 +64,9 @@
                     <div class="inline-flex w-max max-w-full items-center gap-1 rounded-[8px] border border-[#dbe3eb] bg-white p-1">
                         <span class="max-w-[220px] truncate px-2 text-[9px] font-bold text-[#5e7084]">{{ $evidence->nama_file ?: 'Video kondisi' }}</span>
                         <a class="grid h-[28px] w-[32px] place-items-center rounded-[7px] text-[#146bb5] no-underline hover:bg-[#f8fafc]" href="{{ route('penghapusan-aset.bukti.preview', $evidence) }}" target="_blank" rel="noopener noreferrer" title="Lihat video" aria-label="Lihat video"><svg class="h-[14px] w-[14px] fill-none stroke-current stroke-[2.2] [stroke-linecap:round] [stroke-linejoin:round]" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" /><circle cx="12" cy="12" r="3" /></svg></a>
-                        <a class="grid h-[28px] w-[32px] place-items-center rounded-[7px] text-[#5e7084] no-underline hover:bg-[#f8fafc]" href="{{ route('penghapusan-aset.bukti', $evidence) }}" title="Unduh video" aria-label="Unduh video"><svg class="h-[14px] w-[14px] fill-none stroke-current stroke-[2.2] [stroke-linecap:round] [stroke-linejoin:round]" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12" /><path d="m7 10 5 5 5-5" /><path d="M5 21h14" /></svg></a>
+                        @if ($canDownloadDisposal)
+                            <a class="grid h-[28px] w-[32px] place-items-center rounded-[7px] text-[#5e7084] no-underline hover:bg-[#f8fafc]" href="{{ route('penghapusan-aset.bukti', $evidence) }}" title="Unduh video" aria-label="Unduh video"><svg class="h-[14px] w-[14px] fill-none stroke-current stroke-[2.2] [stroke-linecap:round] [stroke-linejoin:round]" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12" /><path d="m7 10 5 5 5-5" /><path d="M5 21h14" /></svg></a>
+                        @endif
                     </div>
                 @endforeach
             </div>
@@ -80,10 +85,12 @@
                     <svg class="h-[13px] w-[13px] fill-none stroke-current stroke-[2.2] [stroke-linecap:round] [stroke-linejoin:round]" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" /><circle cx="12" cy="12" r="3" /></svg>
                     View
                 </a>
-                <a class="page-action-button inline-flex min-h-[32px] items-center justify-center gap-1.5 rounded-[8px] border border-[#dbe3eb] bg-white px-3 text-[9px] font-bold text-[#5e7084] no-underline transition hover:border-[#b8c6d6] hover:bg-[#f8fafc]" href="{{ route('penghapusan-aset.dokumen', $data) }}">
-                    <svg class="h-[13px] w-[13px] fill-none stroke-current stroke-[2.2] [stroke-linecap:round] [stroke-linejoin:round]" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12" /><path d="m7 10 5 5 5-5" /><path d="M5 21h14" /></svg>
-                    Download
-                </a>
+                @if ($canDownloadDisposal)
+                    <a class="page-action-button inline-flex min-h-[32px] items-center justify-center gap-1.5 rounded-[8px] border border-[#dbe3eb] bg-white px-3 text-[9px] font-bold text-[#5e7084] no-underline transition hover:border-[#b8c6d6] hover:bg-[#f8fafc]" href="{{ route('penghapusan-aset.dokumen', $data) }}">
+                        <svg class="h-[13px] w-[13px] fill-none stroke-current stroke-[2.2] [stroke-linecap:round] [stroke-linejoin:round]" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12" /><path d="m7 10 5 5 5-5" /><path d="M5 21h14" /></svg>
+                        Download
+                    </a>
+                @endif
             </div>
         @endif
     </div>

@@ -75,7 +75,7 @@
         <div class="flex min-h-[72px] items-center justify-between gap-5 border-b border-[#edf1f5] px-[18px] py-3.5 max-[780px]:flex-col max-[780px]:items-stretch">
             <div class="flex flex-wrap gap-2">
                 @foreach ($filters as $value => $label)
-                    <a class="page-action-button rounded-[9px] px-4 py-2 text-[10px] font-bold no-underline transition {{ $selectedType === $value ? 'bg-[#146bb5] text-white shadow-[0_8px_18px_rgb(20_107_181_/_16%)]' : 'bg-[#f1f5f9] text-[#66758a] hover:bg-[#e7eef6]' }}" href="{{ route('persetujuan.index', ['jenis' => $value]) }}">
+                    <a class="page-action-button rounded-[9px] px-4 py-2 text-[10px] font-bold no-underline transition {{ $selectedType === $value ? 'bg-[#146bb5] text-white shadow-[0_8px_18px_rgb(20_107_181_/_16%)]' : 'bg-[#f1f5f9] text-[#66758a] hover:bg-[#e7eef6]' }}" href="{{ route('persetujuan.index', ['jenis' => $value, 'per_page' => $selectedPerPage]) }}">
                         {{ $label }}
                     </a>
                 @endforeach
@@ -102,7 +102,7 @@
                 <tbody>
                     @forelse ($visibleItems as $index => $item)
                         <tr>
-                            <td class="number-column">{{ $index + 1 }}</td>
+                            <td class="number-column">{{ $visibleItems->firstItem() + $index }}</td>
                             <td><span class="inline-flex rounded-full px-2.5 py-1 text-[9px] font-extrabold {{ $typeClass($item['type']) }}">{{ $typeLabels[$item['type']] }}</span></td>
                             <td>
                                 <strong>{{ $item['requester'] }}</strong>
@@ -125,7 +125,18 @@
                                     <button type="button" data-modal-open="approval-{{ $item['type'] }}-{{ $item['id'] }}" title="Tinjau" aria-label="Tinjau {{ $item['title'] }}">
                                         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Zm10 3a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" /></svg>
                                     </button>
-                                    @if ($canDeleteApprovals)
+                                    @php
+                                        $data = $item['data'];
+                                        $canDeleteItem = $canDeleteApprovals
+                                            && $item['type'] !== 'procurement'
+                                            && ($item['type'] !== 'disposal' || (
+                                                $item['status'] === AssetDisposalStatus::Submitted->value
+                                                && $data->diperiksa_oleh === null
+                                                && $data->tanggal_pemeriksaan === null
+                                                && $data->alasan_penolakan === null
+                                            ));
+                                    @endphp
+                                    @if ($canDeleteItem)
                                         <button class="text-[#c94c45]" type="button" data-modal-open="delete-approval-{{ $item['type'] }}-{{ $item['id'] }}" title="Hapus" aria-label="Hapus {{ $item['title'] }}">
                                             <svg class="stroke-[#c94c45]" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" /></svg>
                                         </button>
@@ -147,10 +158,42 @@
                 </tbody>
             </table>
         </div>
+        <div class="table-pagination">
+            <form method="GET" action="{{ route('persetujuan.index') }}" class="per-page-control">
+                @foreach (request()->except(['per_page', 'page']) as $key => $value)
+                    <input type="hidden" name="{{ $key }}" value="{{ $value }}">
+                @endforeach
+                <label for="approval-per-page">Tampilkan</label>
+                <select id="approval-per-page" name="per_page" onchange="this.form.submit()">
+                    @foreach ([10, 25, 50, 100] as $option)
+                        <option value="{{ $option }}" @selected($selectedPerPage === $option)>{{ $option }} data</option>
+                    @endforeach
+                </select>
+            </form>
+            <span>Halaman {{ $visibleItems->currentPage() }} dari {{ $visibleItems->lastPage() }}</span>
+            <div>
+                <a class="pagination-icon-button {{ $visibleItems->onFirstPage() ? 'pointer-events-none opacity-45' : '' }}" href="{{ $visibleItems->previousPageUrl() ?: '#' }}" aria-label="Halaman sebelumnya" title="Halaman sebelumnya">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
+                </a>
+                <a class="pagination-icon-button {{ $visibleItems->hasMorePages() ? '' : 'pointer-events-none opacity-45' }}" href="{{ $visibleItems->nextPageUrl() ?: '#' }}" aria-label="Halaman berikutnya" title="Halaman berikutnya">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6" /></svg>
+                </a>
+            </div>
+        </div>
     </section>
 
     @foreach ($visibleItems as $item)
-        @php $data = $item['data']; @endphp
+        @php
+            $data = $item['data'];
+            $canDeleteItem = $canDeleteApprovals
+                && $item['type'] !== 'procurement'
+                && ($item['type'] !== 'disposal' || (
+                    $item['status'] === AssetDisposalStatus::Submitted->value
+                    && $data->diperiksa_oleh === null
+                    && $data->tanggal_pemeriksaan === null
+                    && $data->alasan_penolakan === null
+                ));
+        @endphp
         <div class="fixed inset-0 z-80 hidden place-items-center overflow-y-auto bg-[rgb(5_22_38_/_48%)] p-6 animate-[modalBackdropIn_.2s_ease-out_both] max-[580px]:p-3" data-modal="approval-{{ $item['type'] }}-{{ $item['id'] }}" role="presentation">
             <section class="w-[min(900px,100%)] max-h-[calc(100vh-48px)] overflow-y-auto rounded-2xl bg-white shadow-[0_25px_80px_rgb(2_19_34_/_28%)] animate-[modalZoomIn_.24s_cubic-bezier(.2,.8,.2,1)_both]" role="dialog" aria-modal="true">
                 <header class="flex min-h-[83px] items-start justify-between gap-5 border-b border-[#edf1f5] px-[22px] py-[17px]">
@@ -219,7 +262,7 @@
             </section>
         </div>
 
-        @if ($canDeleteApprovals)
+        @if ($canDeleteItem)
             <div class="fixed inset-0 z-80 hidden place-items-center overflow-y-auto bg-[rgb(5_22_38_/_48%)] p-6 animate-[modalBackdropIn_.2s_ease-out_both] max-[580px]:p-3" data-modal="delete-approval-{{ $item['type'] }}-{{ $item['id'] }}" role="presentation">
                 <section class="w-[min(440px,100%)] rounded-2xl bg-white p-7 text-center shadow-[0_25px_80px_rgb(2_19_34_/_28%)] animate-[modalZoomIn_.24s_cubic-bezier(.2,.8,.2,1)_both]" role="dialog" aria-modal="true">
                     <div class="mx-auto mb-4 grid h-[54px] w-[54px] place-items-center rounded-full bg-[#fee2e2] text-[#c94c45]">

@@ -2,7 +2,7 @@
     use App\Enums\RuanganStatus;
 
     $value = fn (string $field, mixed $default = null) => old($field, $item?->{$field} ?? $default);
-    $selectedUser = old('penanggung_jawab_id', $item?->penanggung_jawab_id);
+    $selectedAssetHolder = old('pemegang_aset_id', $item?->pemegang_aset_id);
     $selectedStatus = old('status', ($item?->status instanceof RuanganStatus ? $item->status->value : $item?->status) ?? RuanganStatus::Active->value);
 @endphp
 
@@ -32,13 +32,16 @@
     </label>
     <label class="grid min-w-0 gap-2 text-[11px] font-bold text-[#34445a]">
         <span>Penanggung Jawab</span>
-        <select class="h-[42px] w-full min-w-0 rounded-[9px] border border-[#dce4ec] bg-white px-3 text-[10px] font-normal outline-0 focus:border-[#6fa9cf] focus:shadow-[0_0_0_3px_rgb(20_107_181_/_8%)]" name="penanggung_jawab_id">
+        <select class="h-[42px] w-full min-w-0 rounded-[9px] border border-[#dce4ec] bg-white px-3 text-[10px] font-normal outline-0 focus:border-[#6fa9cf] focus:shadow-[0_0_0_3px_rgb(20_107_181_/_8%)]" name="pemegang_aset_id">
             <option value="">Belum ditentukan</option>
-            @foreach ($users as $user)
-                <option value="{{ $user->id }}" @selected((string) $selectedUser === (string) $user->id)>{{ $user->name }} · {{ $user->email }}</option>
+            @foreach ($assetHolders as $assetHolder)
+                <option value="{{ $assetHolder->id }}" @selected((string) $selectedAssetHolder === (string) $assetHolder->id)>{{ $assetHolder->nama_pegawai }} — {{ \App\Enums\WorkUnit::labelFor($assetHolder->unit_kerja) }}</option>
             @endforeach
         </select>
-        @error('penanggung_jawab_id') <small class="text-[10px] font-semibold text-[#b42318]">{{ $message }}</small> @enderror
+        @if ($item && ! $item->pemegang_aset_id && $item->penanggungJawab)
+            <small class="text-[10px] font-medium text-[#7f8ea1]">Penanggung jawab lama: {{ $item->penanggungJawab->name }}. Data lama tetap tersimpan sampai Anda memilih Data Pegawai.</small>
+        @endif
+        @error('pemegang_aset_id') <small class="text-[10px] font-semibold text-[#b42318]">{{ $message }}</small> @enderror
     </label>
     <label class="grid min-w-0 gap-2 text-[11px] font-bold text-[#34445a]">
         <span>Status</span>

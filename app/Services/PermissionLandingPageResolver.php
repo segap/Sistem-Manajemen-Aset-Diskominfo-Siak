@@ -108,6 +108,7 @@ class PermissionLandingPageResolver
                 'laporan-dokumen/tahunan' => 'laporan_tahunan.view',
                 'laporan-dokumen/aset-unaudited' => 'laporan_aset_unaudited.view',
                 'laporan-dokumen/aset-audited' => 'laporan_aset_audited.view',
+                'laporan-dokumen/rkbmd' => 'laporan_rkbmd.view',
                 'laporan-dokumen/berita-acara-bmd', 'laporan-dokumen/berita-acara-pemakaian-bmd', 'laporan-dokumen/berita-acara-serah-terima' => 'berita_acara_bmd.view',
                 'laporan-dokumen/persediaan-bulanan' => 'laporan_persediaan_bulanan.view',
                 'laporan-dokumen/persediaan-semester-1' => 'laporan_persediaan_semester_1.view',

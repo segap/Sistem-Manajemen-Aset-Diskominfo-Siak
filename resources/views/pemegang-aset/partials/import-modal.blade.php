@@ -2,7 +2,7 @@
     <section class="w-[min(720px,100%)] max-h-[calc(100vh-48px)] overflow-y-auto rounded-2xl bg-white shadow-[0_25px_80px_rgb(2_19_34_/_28%)] animate-[modalZoomIn_.24s_cubic-bezier(.2,.8,.2,1)_both]" role="dialog" aria-modal="true">
         <header class="flex min-h-[83px] items-center justify-between border-b border-[#edf1f5] px-[22px] py-[17px]">
             <div>
-                <h2 class="m-0 mt-[3px] text-xl font-extrabold text-[#0b2b50]">Import Data Pemegang Aset</h2>
+                <h2 class="m-0 mt-[3px] text-xl font-extrabold text-[#0b2b50]">Import Data Pegawai</h2>
                 <p class="m-0 mt-1 text-[11px] text-[#7f8ea1]">Periksa file Excel terlebih dahulu sebelum data disimpan.</p>
             </div>
             <button class="inline-flex h-[34px] w-[34px] items-center justify-center rounded-[9px] border-0 bg-[#f2f5f8] text-[#8291a2]" type="button" data-modal-close aria-label="Tutup">
@@ -16,7 +16,7 @@
             @endif
 
             <div class="rounded-[12px] border border-[#dbeafe] bg-[#f8fbff] p-4 text-[11px] leading-relaxed text-[#53677d]">
-                Format file harus <strong>.xlsx</strong>, maksimal <strong>5 MB</strong>. Kolom yang dibaca: Nama Pegawai, NIP, Email, Unit Kerja, Jabatan, Nomor HP, dan NIK.
+                Format file harus <strong>.xlsx</strong>, maksimal <strong>5 MB</strong>. Kolom yang dibaca: Nama Pegawai, NIP, Email, Unit Kerja, Jabatan, Nomor HP, NIK, dan Alamat <em>(opsional)</em>.
             </div>
 
             <a class="page-action-button inline-flex min-h-[38px] w-max items-center justify-center rounded-[9px] border border-[#dbe3eb] bg-white px-3.5 text-[10px] font-bold text-[#146bb5] no-underline transition hover:bg-[#f8fafc]" href="{{ route('pemegang-aset.template-impor') }}">

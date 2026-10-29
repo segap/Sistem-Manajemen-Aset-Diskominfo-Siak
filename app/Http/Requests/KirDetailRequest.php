@@ -9,7 +9,9 @@ class KirDetailRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()?->role === 'admin' || $this->user()?->role === 'super_admin';
+        return $this->isMethod('POST')
+            ? (bool) $this->user()?->hasPermission('kir.create')
+            : (bool) $this->user()?->hasPermission('kir.update');
     }
 
     /** @return array<string, mixed> */

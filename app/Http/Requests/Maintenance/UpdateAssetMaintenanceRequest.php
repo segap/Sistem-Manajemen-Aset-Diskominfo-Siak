@@ -8,6 +8,7 @@ use App\Enums\AssetMaintenanceType;
 use App\Enums\MaintenanceFinalResult;
 use App\Enums\MaintenanceMainFunctionStatus;
 use App\Enums\MaintenanceTestResult;
+use App\Models\AssetMaintenance;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
@@ -16,7 +17,15 @@ class UpdateAssetMaintenanceRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return in_array($this->user()?->role, ['tim_aset', 'super_admin'], true);
+        $user = $this->user();
+        $maintenance = $this->route('assetMaintenance');
+
+        if (! $user?->hasPermission('pemeliharaan.update')) {
+            return false;
+        }
+
+        return $user->role !== 'admin_bidang'
+            || ($maintenance instanceof AssetMaintenance && $maintenance->pemohon_id === $user->id);
     }
 
     public function rules(): array

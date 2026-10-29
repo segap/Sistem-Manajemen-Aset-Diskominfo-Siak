@@ -12,6 +12,7 @@ use App\Http\Requests\StoreLoanRequest;
 use App\Models\Asset;
 use App\Models\DetailPeminjaman;
 use App\Models\LoanRequest;
+use App\Services\AssetConditionStockService;
 use App\Services\RiwayatPersetujuanService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
@@ -99,10 +100,10 @@ class LoanRequestController extends Controller
 
     public function store(StoreLoanRequest $request): RedirectResponse
     {
-        abort_if(
-            ! in_array($this->roleValue($request->user()?->role), [UserRole::AdminBidang->value, UserRole::SuperAdmin->value], true),
+        abort_unless(
+            $request->user()?->hasPermission('peminjaman.create'),
             403,
-            'Pengajuan peminjaman hanya dapat dibuat oleh Admin Bidang.',
+            'Anda tidak memiliki hak akses untuk mengajukan peminjaman.',
         );
 
         $data = $request->validated();
@@ -195,19 +196,26 @@ class LoanRequestController extends Controller
     public function decide(DecideLoanRequest $request, LoanRequest $loanRequest): RedirectResponse
     {
         $role = $this->roleValue($request->user()?->role);
-
         $decision = LoanStatus::from($request->validated('decision'));
+        $processedAsVerification = false;
 
-        DB::transaction(function () use ($request, $loanRequest, $decision, $role): void {
+        DB::transaction(function () use ($request, $loanRequest, $decision, $role, &$processedAsVerification): void {
             $loan = LoanRequest::query()->lockForUpdate()->findOrFail($loanRequest->id);
 
-            if ($role === UserRole::TimAset->value) {
+            if ($loan->status === LoanStatus::Submitted) {
+                abort_unless(
+                    $request->user()?->hasPermission('peminjaman.verify'),
+                    403,
+                    'Anda tidak memiliki hak akses untuk memverifikasi peminjaman.',
+                );
+
                 $this->decideAsAssetTeam($request, $loan, $decision);
+                $processedAsVerification = true;
 
                 return;
             }
 
-            if ($role === UserRole::KasubbagUmumPerencanaan->value) {
+            if ($loan->status === LoanStatus::VerifiedByAssetTeam && $role === UserRole::KasubbagUmumPerencanaan->value) {
                 $this->decideAsSupervisor($request, $loan, $decision);
 
                 return;
@@ -217,8 +225,8 @@ class LoanRequestController extends Controller
         });
 
         return back()->with('success', match (true) {
-            $role === UserRole::TimAset->value && $decision === LoanStatus::VerifiedByAssetTeam => 'Pengajuan diverifikasi Tim Aset.',
-            $role === UserRole::TimAset->value && $decision === LoanStatus::Rejected => 'Pengajuan ditolak Tim Aset.',
+            $processedAsVerification && $decision === LoanStatus::VerifiedByAssetTeam => 'Pengajuan diverifikasi Tim Aset.',
+            $processedAsVerification && $decision === LoanStatus::Rejected => 'Pengajuan ditolak Tim Aset.',
             $decision === LoanStatus::Approved => 'Pengajuan disetujui Kasubbag.',
             default => 'Pengajuan ditolak Kasubbag.',
         });
@@ -306,10 +314,10 @@ class LoanRequestController extends Controller
 
     public function handOver(Request $request, LoanRequest $loanRequest): RedirectResponse
     {
-        abort_if(
-            $this->roleValue($request->user()?->role) !== UserRole::TimAset->value,
+        abort_unless(
+            $request->user()?->hasPermission('peminjaman.handover'),
             403,
-            'Penyerahan barang hanya dapat dikonfirmasi oleh Tim Aset.',
+            'Anda tidak memiliki hak akses untuk menyerahkan barang.',
         );
 
         DB::transaction(function () use ($request, $loanRequest): void {
@@ -338,15 +346,15 @@ class LoanRequestController extends Controller
         return back()->with('success', 'Barang berhasil diserahkan.');
     }
 
-    public function receiveReturn(ReturnLoanRequest $request, LoanRequest $loanRequest): RedirectResponse
+    public function receiveReturn(ReturnLoanRequest $request, LoanRequest $loanRequest, AssetConditionStockService $conditionStockService): RedirectResponse
     {
-        abort_if(
-            $this->roleValue($request->user()?->role) !== UserRole::TimAset->value,
+        abort_unless(
+            $request->user()?->hasPermission('peminjaman.return'),
             403,
-            'Pengembalian barang hanya dapat dikonfirmasi oleh Tim Aset.',
+            'Anda tidak memiliki hak akses untuk mencatat pengembalian barang.',
         );
 
-        DB::transaction(function () use ($request, $loanRequest): void {
+        DB::transaction(function () use ($request, $loanRequest, $conditionStockService): void {
             $loan = LoanRequest::query()->lockForUpdate()->findOrFail($loanRequest->id);
             $user = $request->user();
 
@@ -366,14 +374,50 @@ class LoanRequestController extends Controller
             }
 
             $validated = $request->validated();
+            $returnDetails = [];
             foreach ($details as $detail) {
                 $detailData = $validated['details'][$detail->id] ?? null;
                 if (! $detailData) {
                     throw ValidationException::withMessages(['details' => 'Kondisi pengembalian semua barang wajib diisi.']);
                 }
 
+                $returnDetails[$detail->id] = $detailData;
+            }
+
+            $assetIds = $details->pluck('aset_id')->filter()->unique()->sort()->values();
+            $assets = Asset::query()
+                ->whereIn('id', $assetIds)
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get()
+                ->keyBy('id');
+
+            if ($assets->count() !== $assetIds->count()) {
+                throw ValidationException::withMessages(['details' => 'Aset pada detail peminjaman tidak ditemukan.']);
+            }
+
+            foreach ($details->sortBy('aset_id') as $detail) {
+                $detailData = $returnDetails[$detail->id];
+                $returnCondition = $detailData['kondisi_kembali'];
+
+                if ($returnCondition !== AssetCondition::Good->value) {
+                    $conditionStockService->transfer(
+                        $assets->get($detail->aset_id),
+                        AssetCondition::Good->value,
+                        $returnCondition,
+                        1,
+                        sprintf(
+                            'Pengembalian peminjaman #%d: %s -> %s.',
+                            $loan->id,
+                            AssetCondition::Good->value,
+                            $returnCondition,
+                        ),
+                        $user->id,
+                    );
+                }
+
                 $detail->update([
-                    'kondisi_kembali' => $detailData['kondisi_kembali'],
+                    'kondisi_kembali' => $returnCondition,
                     'catatan_pengembalian' => $detailData['catatan_pengembalian'] ?? null,
                 ]);
             }

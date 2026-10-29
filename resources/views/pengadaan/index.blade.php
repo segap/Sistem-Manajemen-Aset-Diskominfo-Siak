@@ -7,7 +7,23 @@
     use App\Enums\UserRole;
 
     $role = auth()->user()?->role;
-    $canCreateOrder = in_array($role, [UserRole::Admin->value, UserRole::TimAset->value, UserRole::SuperAdmin->value], true);
+    $canCreateOrder = auth()->user()?->hasPermission('pengadaan.create') ?? false;
+    $canEditOrder = auth()->user()?->hasPermission('pengadaan.update') ?? false;
+    $canExportOrder = auth()->user()?->hasPermission('pengadaan.export') ?? false;
+    $canDeleteOrder = $role === UserRole::SuperAdmin->value;
+    $isSafeToModify = fn ($procurement) => $procurement->status === ProcurementStatus::Ordered
+        && $procurement->jumlah_diterima === null
+        && $procurement->tanggal_penerimaan === null
+        && $procurement->diterima_oleh === null
+        && $procurement->catatan_penerimaan === null
+        && $procurement->bukti_penerimaan === null
+        && $procurement->diverifikasi_oleh === null
+        && $procurement->tanggal_verifikasi === null
+        && $procurement->kondisi === null
+        && $procurement->lokasi_penyimpanan === null
+        && $procurement->catatan_verifikasi === null
+        && $procurement->alasan_penolakan === null
+        && $procurement->aset_id === null;
     $selectedStatus = request('status', '');
     $numberStart = ($procurements->currentPage() - 1) * $procurements->perPage();
     $selectedPerPage = (int) request('per_page', $procurements->perPage());
@@ -67,7 +83,9 @@
             @if (request()->hasAny(['search', 'status']))
                 <a class="page-action-button inline-flex min-h-[38px] items-center justify-center rounded-[9px] border border-[#dbe3eb] bg-white px-3.5 text-[10px] font-bold text-[#5e7084] no-underline transition hover:border-[#b8c6d6] hover:bg-[#f8fafc]" href="{{ route('pengadaan.index') }}">Reset</a>
             @endif
-            <x-export-dropdown dataset="pengadaan" />
+            @if ($canExportOrder)
+                <x-export-dropdown dataset="pengadaan" />
+            @endif
         </form>
 
         <div class="table-scroll">
@@ -95,6 +113,16 @@
                                     <button title="Detail" type="button" data-modal-open="detail-procurement-{{ $procurement->id }}" aria-label="Detail pengadaan {{ $procurement->nama_barang }}">
                                         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Zm10 3a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" /></svg>
                                     </button>
+                                    @if ($canEditOrder && $isSafeToModify($procurement))
+                                        <button title="Edit" type="button" data-modal-open="edit-procurement-{{ $procurement->id }}" aria-label="Edit pengadaan {{ $procurement->nama_barang }}">
+                                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m16.7 3.3 4 4M4 20l4.2-1 10.3-10.3a2.8 2.8 0 0 0-4-4L4.2 14.9 4 20Z" /><path d="m12.8 6.5 4 4" /></svg>
+                                        </button>
+                                    @endif
+                                    @if ($canDeleteOrder && $isSafeToModify($procurement))
+                                        <button class="danger" title="Hapus" type="button" data-modal-open="delete-procurement-{{ $procurement->id }}" aria-label="Hapus pengadaan {{ $procurement->nama_barang }}">
+                                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" /></svg>
+                                        </button>
+                                    @endif
                                 </div>
                             </td>
                         </tr>
@@ -139,6 +167,12 @@
 
     @foreach ($procurements as $procurement)
         @include('pengadaan.partials.detail-modal', compact('procurement', 'conditions', 'rupiah', 'formatDate', 'formatDateTime', 'statusClass'))
+        @if ($canEditOrder && $isSafeToModify($procurement))
+            @include('pengadaan.partials.edit-modal', compact('procurement', 'categories'))
+        @endif
+        @if ($canDeleteOrder && $isSafeToModify($procurement))
+            @include('pengadaan.partials.delete-modal', compact('procurement'))
+        @endif
     @endforeach
 </main>
 @endsection

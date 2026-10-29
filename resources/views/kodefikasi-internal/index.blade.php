@@ -3,7 +3,11 @@
 @section('title', 'Kodefikasi Internal - SIMIVA')
 
 @php
-    $canManage = in_array(auth()->user()?->role, ['admin', 'super_admin'], true);
+    $canGenerate = auth()->user()?->hasPermission('kodefikasi_internal.generate') ?? false;
+    $canBulkGenerate = auth()->user()?->hasPermission('kodefikasi_internal.bulk_generate') ?? false;
+    $canUpdate = auth()->user()?->hasPermission('kodefikasi_internal.update') ?? false;
+    $canReset = auth()->user()?->hasPermission('kodefikasi_internal.reset') ?? false;
+    $canExport = auth()->user()?->hasPermission('kodefikasi_internal.export') ?? false;
     $numberStart = ($assets->currentPage() - 1) * $assets->perPage();
     $selectedPerPage = (int) request('per_page', $assets->perPage());
 @endphp
@@ -15,7 +19,7 @@
             <h1 class="m-0 mb-[3px] text-[clamp(25px,2.5vw,34px)] font-extrabold tracking-[-.035em] text-[#0b2b50]">Kodefikasi Internal</h1>
             <p class="m-0 text-[13px] text-[#66758a]">Pengelolaan kode identifikasi internal setiap unit aset.</p>
         </div>
-        @if ($canManage)
+        @if ($canBulkGenerate)
             <button class="page-action-button inline-flex min-h-[38px] items-center justify-center rounded-[9px] border-0 bg-[#146bb5] px-3.5 text-[10px] font-bold text-white shadow-[0_8px_18px_rgb(20_107_181_/_16%)] transition hover:bg-[#0c568f]" type="button" data-modal-open="bulk-generate-kode-internal">
                 Generate Kode Belum Terdaftar
             </button>
@@ -80,7 +84,9 @@
             </select>
             <button class="page-action-button inline-flex min-h-[38px] items-center justify-center rounded-[9px] border-0 bg-[#146bb5] px-3.5 text-[10px] font-bold text-white shadow-[0_8px_18px_rgb(20_107_181_/_16%)] transition hover:bg-[#0c568f]" type="submit">Cari</button>
             <a class="page-action-button inline-flex min-h-[38px] items-center justify-center rounded-[9px] border border-[#dbe3eb] bg-white px-3.5 text-[10px] font-bold text-[#5e7084] no-underline transition hover:border-[#b8c6d6] hover:bg-[#f8fafc]" href="{{ route('kodefikasi-internal.index') }}">Reset</a>
-            <x-export-dropdown dataset="kodefikasi-internal" />
+            @if ($canExport)
+                <x-export-dropdown dataset="kodefikasi-internal" />
+            @endif
         </form>
 
         <div class="table-scroll">
@@ -93,7 +99,7 @@
                         <th>Kode Barang</th>
                         <th>Ruangan/Lokasi</th>
                         <th>Kondisi</th>
-                        @if ($canManage)
+                        @if ($canGenerate || $canUpdate || $canReset)
                             <th class="action-column">Aksi</th>
                         @endif
                     </tr>
@@ -114,14 +120,18 @@
                             <td>{{ $asset->kodeBarang ? $asset->kodeBarang->kode_barang : '-' }}</td>
                             <td>{{ $asset->lokasi_penyimpanan ?: '-' }}</td>
                             <td><span class="kondisi-badge kondisi-{{ $asset->kondisi->value }}">{{ $asset->kondisi->label() }}</span></td>
-                            @if ($canManage)
+                            @if ($canGenerate || $canUpdate || $canReset)
                                 <td class="action-column">
                                     <div class="row-actions">
-                                        @if (! $asset->kode_internal)
+                                        @if (! $asset->kode_internal && $canGenerate)
                                             <button type="button" data-modal-open="generate-kode-internal-{{ $asset->id }}" title="Buat Kode" aria-label="Buat kode {{ $asset->nama_aset }}"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></svg></button>
-                                        @else
+                                        @elseif ($asset->kode_internal)
+                                            @if ($canUpdate)
                                             <button type="button" data-modal-open="edit-kode-internal-{{ $asset->id }}" title="Edit" aria-label="Edit kode {{ $asset->nama_aset }}"><svg viewBox="0 0 24 24"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4L16.5 3.5Z" /></svg></button>
+                                            @endif
+                                            @if ($canReset)
                                             <button class="danger" type="button" data-modal-open="reset-kode-internal-{{ $asset->id }}" title="Reset" aria-label="Reset kode {{ $asset->nama_aset }}"><svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M9 7l1-3h4l1 3m3 0-1 14H7L6 7" /></svg></button>
+                                            @endif
                                         @endif
                                     </div>
                                 </td>
@@ -129,7 +139,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="{{ $canManage ? 7 : 6 }}">
+                            <td colspan="{{ ($canGenerate || $canUpdate || $canReset) ? 7 : 6 }}">
                                 <div class="table-empty">
                                     <span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v16H4z" /><path d="M8 8h8M8 12h5M8 16h6" /></svg></span>
                                     <strong>Aset tidak ditemukan</strong>
@@ -162,7 +172,7 @@
         </div>
     </section>
 
-    @if ($canManage)
+    @if ($canBulkGenerate)
         <div class="fixed inset-0 z-80 hidden place-items-center overflow-y-auto bg-[rgb(5_22_38_/_48%)] p-6" data-modal="bulk-generate-kode-internal" role="presentation">
             <section class="w-[min(540px,100%)] rounded-2xl bg-white shadow-[0_25px_80px_rgb(2_19_34_/_28%)]" role="dialog" aria-modal="true">
                 <header class="flex min-h-[76px] items-center justify-between border-b border-[#edf1f5] px-[22px] py-[17px]">
@@ -180,9 +190,11 @@
             </section>
         </div>
 
-        @foreach ($assets as $asset)
+    @endif
+
+    @foreach ($assets as $asset)
             @php($preview = $previews[$asset->id] ?? null)
-            @if (! $asset->kode_internal && $preview)
+            @if ($canGenerate && ! $asset->kode_internal && $preview)
                 <div class="fixed inset-0 z-80 hidden place-items-center overflow-y-auto bg-[rgb(5_22_38_/_48%)] p-6" data-modal="generate-kode-internal-{{ $asset->id }}" role="presentation">
                     <section class="w-[min(620px,100%)] rounded-2xl bg-white shadow-[0_25px_80px_rgb(2_19_34_/_28%)]" role="dialog" aria-modal="true">
                         <header class="flex min-h-[76px] items-center justify-between border-b border-[#edf1f5] px-[22px] py-[17px]">
@@ -212,7 +224,7 @@
                 </div>
             @endif
 
-            @if ($asset->kode_internal)
+            @if ($canUpdate && $asset->kode_internal)
                 <div class="fixed inset-0 z-80 hidden place-items-center overflow-y-auto bg-[rgb(5_22_38_/_48%)] p-6" data-modal="edit-kode-internal-{{ $asset->id }}" role="presentation">
                     <section class="w-[min(560px,100%)] rounded-2xl bg-white shadow-[0_25px_80px_rgb(2_19_34_/_28%)]" role="dialog" aria-modal="true">
                         <header class="flex min-h-[76px] items-center justify-between border-b border-[#edf1f5] px-[22px] py-[17px]">
@@ -234,7 +246,9 @@
                         </form>
                     </section>
                 </div>
+            @endif
 
+            @if ($canReset && $asset->kode_internal)
                 <div class="fixed inset-0 z-80 hidden place-items-center overflow-y-auto bg-[rgb(5_22_38_/_48%)] p-6" data-modal="reset-kode-internal-{{ $asset->id }}" role="presentation">
                     <section class="w-[min(520px,100%)] rounded-2xl bg-white shadow-[0_25px_80px_rgb(2_19_34_/_28%)]" role="dialog" aria-modal="true">
                         <header class="flex min-h-[76px] items-center justify-between border-b border-[#edf1f5] px-[22px] py-[17px]">
@@ -244,7 +258,7 @@
                         <form class="grid gap-4 p-[22px]" method="POST" action="{{ route('kodefikasi-internal.reset', $asset) }}" data-submit-loading>
                             @csrf
                             @method('PATCH')
-                            <p class="m-0 text-[12px] leading-relaxed text-[#52657a]">Kode <strong>{{ $asset->kode_internal }}</strong> pada aset <strong>{{ $asset->nama_aset }}</strong> akan dikosongkan. Nomor yang pernah digunakan tidak akan dipakai ulang.</p>
+                            <p class="m-0 text-[12px] leading-relaxed text-[#52657a]">Kode <strong>{{ $asset->kode_internal }}</strong> pada aset <strong>{{ $asset->nama_aset }}</strong> akan dikosongkan. Nomor yang pernah digunakan tidak akan dipakai ulang dan perubahan ini dapat memengaruhi pencocokan aset pada proses lain.</p>
                             <footer class="flex justify-end gap-2 border-t border-[#edf1f5] pt-4">
                                 <button class="page-action-button border border-[#dbe3eb] bg-white text-[#5e7084]" type="button" data-modal-close>Batal</button>
                                 <button class="page-action-button border-0 bg-[#b42318] text-white" type="submit">Reset</button>
@@ -253,7 +267,6 @@
                     </section>
                 </div>
             @endif
-        @endforeach
-    @endif
+    @endforeach
 </main>
 @endsection

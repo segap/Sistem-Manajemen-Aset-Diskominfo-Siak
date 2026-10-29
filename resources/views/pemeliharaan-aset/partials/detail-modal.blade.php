@@ -66,7 +66,7 @@
                 @endif
             </article>
 
-            @if ($canProcess && $maintenance->status === AssetMaintenanceStatus::Submitted)
+            @if ($canVerify && $maintenance->status === AssetMaintenanceStatus::Submitted)
                 <form class="grid gap-3 rounded-[14px] border border-[#dbeafe] bg-[#f8fbff] p-4" method="POST" action="{{ route('pemeliharaan-aset.verify', $maintenance) }}" data-submit-loading>
                     @csrf @method('PATCH')
                     <label class="grid gap-2 text-[11px] font-extrabold text-[#405267]">Keputusan
@@ -88,14 +88,14 @@
                 </form>
             @endif
 
-            @if ($canProcess && $maintenance->status === AssetMaintenanceStatus::Approved)
+            @if ($canStart && $maintenance->status === AssetMaintenanceStatus::Approved)
                 <form method="POST" action="{{ route('pemeliharaan-aset.start', $maintenance) }}" data-submit-loading>
                     @csrf @method('PATCH')
                     <button class="page-action-button rounded-[9px] border-0 bg-[#146bb5] px-4 py-3 text-[10px] font-bold text-white" type="submit">Mulai Pemeliharaan</button>
                 </form>
             @endif
 
-            @if ($canProcess && $maintenance->status === AssetMaintenanceStatus::InProgress)
+            @if ($canComplete && $maintenance->status === AssetMaintenanceStatus::InProgress)
                 <form class="grid gap-3 rounded-[14px] border border-[#dcfce7] bg-[#fbfffd] p-4" method="POST" action="{{ route('pemeliharaan-aset.complete', $maintenance) }}" enctype="multipart/form-data" data-submit-loading>
                     @csrf @method('PATCH')
                     <div class="grid grid-cols-2 gap-3 max-[760px]:grid-cols-1">
@@ -192,7 +192,7 @@
             @if ($maintenance->status === AssetMaintenanceStatus::Completed)
                 <article class="rounded-[14px] border border-[#e3e9f0] p-4">
                     <h3 class="m-0 mb-3 text-[13px] font-extrabold text-[#0b2b50]">Data Berita Acara</h3>
-                    @if (! $maintenance->hasCompleteReportData() && $canProcess)
+                    @if (! $maintenance->hasCompleteReportData() && $canReportUpdate)
                         <form class="grid gap-3 rounded-[12px] border border-[#dbeafe] bg-[#f8fbff] p-4" method="POST" action="{{ route('pemeliharaan-aset.report-data', $maintenance) }}" data-submit-loading>
                             @csrf @method('PATCH')
                             <div class="rounded-[12px] border border-[#fed7aa] bg-[#fff7ed] p-3 text-[10px] font-semibold text-[#9a3412]">Data Berita Acara belum lengkap. Lengkapi data wajib berikut sebelum download Word.</div>
@@ -253,9 +253,11 @@
                             <p class="m-0"><b>Lokasi Pelaksanaan:</b> {{ $maintenance->lokasi_pelaksanaan ?: '-' }}</p>
                             <p class="m-0"><b>Penanggung Jawab:</b> {{ $maintenance->nama_penanggung_jawab ?: '-' }}</p>
                         </div>
-                        <div class="mt-4 flex flex-wrap gap-2">
-                            <a class="page-action-button inline-flex min-h-[38px] w-max items-center justify-center rounded-[9px] border-0 bg-[#146bb5] px-3.5 text-[10px] font-bold text-white no-underline" href="{{ route('pemeliharaan-aset.word', $maintenance) }}">Download Word Berita Acara</a>
-                        </div>
+                        @if ($canDownload)
+                            <div class="mt-4 flex flex-wrap gap-2">
+                                <a class="page-action-button inline-flex min-h-[38px] w-max items-center justify-center rounded-[9px] border-0 bg-[#146bb5] px-3.5 text-[10px] font-bold text-white no-underline" href="{{ route('pemeliharaan-aset.word', $maintenance) }}">Download Word Berita Acara</a>
+                            </div>
+                        @endif
                     @endif
                 </article>
             @endif

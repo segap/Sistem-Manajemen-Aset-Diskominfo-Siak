@@ -2,14 +2,17 @@
 
 namespace App\Http\Controllers;
 
-use App\Enums\UserRole;
 use App\Enums\WorkUnit;
 use App\Models\AssetHolder;
 use App\Models\ReportDocument;
+use Dompdf\Dompdf;
+use Dompdf\Options;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
@@ -18,6 +21,9 @@ use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
+use PhpOffice\PhpWord\PhpWord;
+use PhpOffice\PhpWord\Writer\Word2007;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ReportDocumentController extends Controller
@@ -64,6 +70,19 @@ class ReportDocumentController extends Controller
             'type' => 'single',
             'period' => 'aset_audited',
             'period_label' => 'Audited',
+            'inventory' => false,
+        ],
+        'rkbmd' => [
+            'title' => 'Laporan RKBMD',
+            'description' => 'Arsip PDF Rencana Kebutuhan Barang Milik Daerah.',
+            'type' => 'multi',
+            'periods' => ['apbd_murni', 'apbd_perubahan'],
+            'period_labels' => [
+                'apbd_murni' => 'APBD Murni',
+                'apbd_perubahan' => 'APBD Perubahan',
+            ],
+            'filter_by_year' => true,
+            'rkbmd' => true,
             'inventory' => false,
         ],
         'berita-acara-bmd' => [
@@ -153,20 +172,24 @@ class ReportDocumentController extends Controller
             && (! $isAssetHolderArchive || $this->assetHolderArchiveSchemaReady());
         $reportTypes = $this->reportTypes($jenis, $config);
         $yearOptions = $this->yearOptions($year);
-        $documents = $schemaReady
-            ? ReportDocument::query()
-                ->with('uploader')
-                ->whereIn('jenis_laporan', $reportTypes)
-                ->when($isAssetHolderArchive, function (Builder $query) use ($year): void {
-                    $query->where(function (Builder $dateQuery) use ($year): void {
-                        $dateQuery->whereYear('tanggal_berita_acara', $year)
-                            ->orWhere(function (Builder $legacyQuery) use ($year): void {
-                                $legacyQuery->whereNull('tanggal_berita_acara')->where('tahun', $year);
-                            });
-                    })->orderByDesc('tanggal_berita_acara')->orderByDesc('id');
-                }, fn (Builder $query) => $query->latest())
-                ->get()
-            : collect();
+        $perPage = $this->perPage($request);
+        $search = $this->searchTerm($request);
+        $documentsQuery = $schemaReady
+            ? $this->documentsQuery($jenis, $config, $year, $search)
+            : null;
+        $usesMonthlySlots = ($config['table_by_month'] ?? false) === true;
+        $documents = $documentsQuery === null
+            ? $this->emptyPaginator($request, $perPage)
+            : ($usesMonthlySlots
+                ? $documentsQuery->get()
+                : $documentsQuery->paginate($perPage)->withQueryString());
+        $documentCollection = $documents instanceof LengthAwarePaginator
+            ? $documents->getCollection()
+            : $documents;
+        $slots = $this->slots($config, $documentCollection);
+        $slotPagination = $usesMonthlySlots
+            ? $this->paginateCollection(collect($slots), $request, $perPage)
+            : null;
         $occupiedPeriodsByYear = $schemaReady && (($config['single_document_per_period'] ?? false) === true)
             ? ReportDocument::query()
                 ->whereIn('jenis_laporan', $reportTypes)
@@ -184,8 +207,15 @@ class ReportDocumentController extends Controller
             'year' => $year,
             'yearOptions' => $yearOptions,
             'documents' => $documents,
-            'slots' => $this->slots($config, $documents),
-            'canUpload' => $this->canUpload($request, $config),
+            'slots' => $slots,
+            'slotPagination' => $slotPagination,
+            'selectedPerPage' => $perPage,
+            'search' => $search,
+            'canUpload' => $this->canManageReport($request, $jenis, 'upload'),
+            'canDownload' => $this->canManageReport($request, $jenis, 'download'),
+            'canDelete' => $this->canManageReport($request, $jenis, 'delete'),
+            'canExport' => $this->canManageReport($request, $jenis, 'export'),
+            'canComplete' => $this->canManageReport($request, $jenis, 'complete'),
             'months' => self::MONTHS,
             'schemaReady' => $schemaReady,
             'occupiedPeriodsByYear' => $occupiedPeriodsByYear,
@@ -193,6 +223,97 @@ class ReportDocumentController extends Controller
                 ? AssetHolder::query()->orderBy('nama_pegawai')->get()
                 : collect(),
         ]);
+    }
+
+    public function exportPdf(Request $request, string $jenis): Response
+    {
+        ['config' => $config, 'year' => $year, 'search' => $search, 'documents' => $documents] = $this->exportData($request, $jenis);
+        $options = new Options;
+        $options->set('defaultFont', 'DejaVu Sans');
+        $pdf = new Dompdf($options);
+        $pdf->loadHtml(view('reports.report-documents', [
+            'title' => $config['title'],
+            'year' => $year,
+            'search' => $search,
+            'documents' => $documents,
+            'periodLabels' => $config['period_labels'] ?? [],
+            'months' => self::MONTHS,
+            'generatedAt' => now(),
+        ])->render());
+        $pdf->setPaper('a4', 'landscape');
+        $pdf->render();
+
+        return response($pdf->output(), Response::HTTP_OK, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="rekap-'.Str::slug($jenis).'-'.$year.'.pdf"',
+        ]);
+    }
+
+    public function exportWord(Request $request, string $jenis): BinaryFileResponse
+    {
+        ['config' => $config, 'year' => $year, 'search' => $search, 'documents' => $documents] = $this->exportData($request, $jenis);
+        $word = new PhpWord;
+        $word->setDefaultFontName('Arial');
+        $word->setDefaultFontSize(9);
+        $section = $word->addSection(['marginTop' => 720, 'marginBottom' => 720, 'marginLeft' => 720, 'marginRight' => 720]);
+        $section->addText($config['title'], ['bold' => true, 'size' => 15, 'color' => '0B2B50']);
+        $section->addText('SIMIVA · Tahun '.$year.' · Diekspor '.now()->translatedFormat('d M Y H:i'));
+        $section->addText($documents->count().' dokumen'.($search !== '' ? ' · Pencarian: '.$search : ''));
+        $table = $section->addTable(['borderSize' => 6, 'borderColor' => 'DCE4EC', 'cellMargin' => 70]);
+        foreach (['No.', 'Periode / Tahun', 'Jenis APBD', 'Judul Dokumen', 'Nama File', 'Tanggal Upload', 'Pengunggah'] as $header) {
+            $table->addCell()->addText($header, ['bold' => true, 'color' => '0B2B50']);
+        }
+
+        foreach ($documents as $index => $document) {
+            $period = ($config['period_labels'][$document->periode] ?? null)
+                ?? (self::MONTHS[$document->bulan] ?? $document->periode ?? '-');
+            foreach ([
+                $index + 1,
+                $period.($document->tahun ? ' '.$document->tahun : ''),
+                $config['period_labels'][$document->periode] ?? '-',
+                $document->judul ?: '-',
+                $document->nama_file_asli,
+                $document->created_at?->translatedFormat('d M Y H:i') ?: '-',
+                $document->uploader?->name ?: '-',
+            ] as $value) {
+                $table->addCell()->addText((string) $value);
+            }
+        }
+
+        if ($documents->isEmpty()) {
+            $table->addRow();
+            $table->addCell(9000, ['gridSpan' => 7])->addText('Data tidak ditemukan.');
+        }
+
+        $path = tempnam(sys_get_temp_dir(), 'simiva-report-document-');
+        (new Word2007($word))->save($path);
+
+        return response()->download($path, 'rekap-'.Str::slug($jenis).'-'.$year.'.docx', [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        ])->deleteFileAfterSend(true);
+    }
+
+    /**
+     * @return array{config: array<string, mixed>, year: int, search: string, documents: Collection<int, ReportDocument>}
+     */
+    private function exportData(Request $request, string $jenis): array
+    {
+        $config = $this->reportConfig($jenis);
+        abort_if(isset($config['redirect_to']), Response::HTTP_NOT_FOUND);
+        $this->authorizeReportAction($request, $jenis, 'export', true);
+
+        $isAssetHolderArchive = $this->isAssetHolderArchive($config);
+        abort_unless(
+            Schema::hasTable('laporan_dokumen') && (! $isAssetHolderArchive || $this->assetHolderArchiveSchemaReady()),
+            Response::HTTP_SERVICE_UNAVAILABLE,
+            'Struktur database laporan dokumen belum tersedia.',
+        );
+
+        $year = $request->integer('tahun', now()->year);
+        $search = $this->searchTerm($request);
+        $documents = $this->documentsQuery($jenis, $config, $year, $search)->get();
+
+        return compact('config', 'year', 'search', 'documents');
     }
 
     public function store(Request $request, string $jenis): RedirectResponse
@@ -205,9 +326,7 @@ class ReportDocumentController extends Controller
             ]);
         }
 
-        $this->authorizeReport($request, $config);
-
-        abort_unless($this->canUpload($request, $config), Response::HTTP_FORBIDDEN, 'Anda tidak memiliki izin upload dokumen laporan.');
+        $this->authorizeReportAction($request, $jenis, 'upload', true);
         $isAssetHolderArchive = $this->isAssetHolderArchive($config);
         abort_unless(
             Schema::hasTable('laporan_dokumen') && (! $isAssetHolderArchive || $this->assetHolderArchiveSchemaReady()),
@@ -289,10 +408,8 @@ class ReportDocumentController extends Controller
 
     public function completeBeritaAcara(Request $request, ReportDocument $document): RedirectResponse
     {
-        $config = self::REPORTS['berita-acara-bmd'];
-        $this->authorizeReport($request, $config);
-        abort_unless($this->canUpload($request, $config), Response::HTTP_FORBIDDEN, 'Anda tidak memiliki izin melengkapi berita acara.');
         abort_unless($this->isBeritaAcaraDocument($document), Response::HTTP_NOT_FOUND);
+        $this->authorizeReportAction($request, $document->jenis_laporan, 'complete', true);
         abort_unless($this->assetHolderArchiveSchemaReady(), Response::HTTP_SERVICE_UNAVAILABLE, 'Struktur arsip Berita Acara belum tersedia. Jalankan migration Berita Acara terlebih dahulu.');
 
         $validated = $request->validate([
@@ -319,10 +436,7 @@ class ReportDocumentController extends Controller
 
     public function destroy(Request $request, ReportDocument $document): RedirectResponse
     {
-        $config = $this->reportConfig($document->jenis_laporan);
-        $this->authorizeReport($request, $config);
-
-        abort_unless($this->canUpload($request, $config), Response::HTTP_FORBIDDEN, 'Anda tidak memiliki izin menghapus dokumen laporan.');
+        $this->authorizeReportAction($request, $document->jenis_laporan, 'delete', true);
         $this->ensureSafeStoragePath($document);
 
         $redirectRoute = route('laporan-dokumen.index', [
@@ -368,8 +482,7 @@ class ReportDocumentController extends Controller
 
     public function preview(Request $request, ReportDocument $document): Response
     {
-        $config = $this->reportConfig($document->jenis_laporan);
-        $this->authorizeReport($request, $config);
+        $this->authorizeReportAction($request, $document->jenis_laporan, 'view');
         $this->ensureFileExists($document);
 
         return response(Storage::disk('local')->get($document->path_file), Response::HTTP_OK, [
@@ -380,8 +493,12 @@ class ReportDocumentController extends Controller
 
     public function download(Request $request, ReportDocument $document): StreamedResponse
     {
-        $config = $this->reportConfig($document->jenis_laporan);
-        $this->authorizeReport($request, $config);
+        $this->authorizeReportAction(
+            $request,
+            $document->jenis_laporan,
+            $document->jenis_laporan === 'rkbmd' ? 'download' : 'view',
+            $document->jenis_laporan === 'rkbmd',
+        );
         $this->ensureFileExists($document);
 
         return Storage::disk('local')->download($document->path_file, $document->nama_file_asli, [
@@ -427,52 +544,58 @@ class ReportDocumentController extends Controller
             : $jenis;
     }
 
-    private function authorizeReport(Request $request, array $config): void
-    {
-        $role = $this->roleValue($request->user()?->role);
-        $allowed = $config['inventory']
-            ? [UserRole::SuperAdmin->value, UserRole::TimAsetPersediaan->value, 'tim_aset_persediaan', 'aset-persediaan']
-            : [UserRole::SuperAdmin->value, UserRole::Admin->value, UserRole::TimAset->value, UserRole::KasubbagUmumPerencanaan->value];
-
-        abort_unless(in_array($role, $allowed, true), Response::HTTP_FORBIDDEN, 'Anda tidak memiliki akses ke dokumen laporan ini.');
-    }
-
     private function authorizeReportView(Request $request, string $jenis, array $config): void
     {
-        $permission = match ($jenis) {
-            'rekonsiliasi-bulanan' => 'laporan_rekonsiliasi_bulanan.view',
-            'semester-1' => 'laporan_semester_1.view',
-            'tahunan' => 'laporan_tahunan.view',
-            'aset-unaudited' => 'laporan_aset_unaudited.view',
-            'aset-audited' => 'laporan_aset_audited.view',
-            'berita-acara-bmd', 'berita-acara-pemakaian-bmd', 'berita-acara-serah-terima' => 'berita_acara_bmd.view',
-            'persediaan-bulanan' => 'laporan_persediaan_bulanan.view',
-            'persediaan-semester-1' => 'laporan_persediaan_semester_1.view',
-            'persediaan-tahunan' => 'laporan_persediaan_tahunan.view',
+        $this->authorizeReportAction($request, $jenis, 'view');
+    }
+
+    private function authorizeReportAction(Request $request, string $jenis, string $action, bool $requiresView = false): void
+    {
+        $permission = $this->reportPermission($jenis, $action);
+        $viewPermission = $this->reportPermission($jenis, 'view');
+
+        abort_unless(
+            $permission
+                && $request->user()?->hasPermission($permission)
+                && (! $requiresView || $request->user()?->hasPermission($viewPermission)),
+            Response::HTTP_FORBIDDEN,
+            'Anda tidak memiliki akses ke dokumen laporan ini.',
+        );
+    }
+
+    private function canManageReport(Request $request, string $jenis, string $action): bool
+    {
+        $permission = $this->reportPermission($jenis, $action);
+        $viewPermission = $this->reportPermission($jenis, 'view');
+
+        return $permission
+            && $request->user()?->hasPermission($viewPermission)
+            && $request->user()?->hasPermission($permission);
+    }
+
+    private function reportPermission(string $jenis, string $action): ?string
+    {
+        $module = match ($jenis) {
+            'rekonsiliasi-bulanan' => 'laporan_rekonsiliasi_bulanan',
+            'semester-1' => 'laporan_semester_1',
+            'tahunan' => 'laporan_tahunan',
+            'aset-unaudited' => 'laporan_aset_unaudited',
+            'aset-audited' => 'laporan_aset_audited',
+            'rkbmd' => 'laporan_rkbmd',
+            'berita-acara-bmd', 'berita_acara_bmd', 'berita-acara-pemakaian-bmd', 'berita-acara-serah-terima' => 'berita_acara_bmd',
+            'persediaan-bulanan' => 'laporan_persediaan_bulanan',
+            'persediaan-semester-1' => 'laporan_persediaan_semester_1',
+            'persediaan-tahunan' => 'laporan_persediaan_tahunan',
             default => null,
         };
 
-        abort_unless($permission && $request->user()?->hasPermission($permission), Response::HTTP_FORBIDDEN, 'Anda tidak memiliki akses ke dokumen laporan ini.');
-    }
+        $allowedActions = $module === 'berita_acara_bmd'
+            ? ['view', 'upload', 'complete', 'delete', 'download', 'export']
+            : ['view', 'upload', 'delete', 'download', 'export'];
 
-    private function canUpload(Request $request, array $config): bool
-    {
-        $role = $this->roleValue($request->user()?->role);
-
-        if ($role === UserRole::SuperAdmin->value) {
-            return true;
-        }
-
-        if ($config['inventory']) {
-            return in_array($role, [UserRole::TimAsetPersediaan->value, 'tim_aset_persediaan', 'aset-persediaan'], true);
-        }
-
-        return in_array($role, [UserRole::Admin->value, UserRole::TimAset->value], true);
-    }
-
-    private function roleValue(mixed $role): ?string
-    {
-        return $role instanceof UserRole ? $role->value : $role;
+        return $module && in_array($action, $allowedActions, true)
+            ? "{$module}.{$action}"
+            : null;
     }
 
     private function isAssetHolderArchive(array $config): bool
@@ -505,12 +628,16 @@ class ReportDocumentController extends Controller
             return collect(array_keys(self::MONTHS))->map(fn (int $month): string => "bulan_{$month}")->all();
         }
 
+        if (($config['type'] ?? null) === 'multi') {
+            return $config['periods'] ?? [(string) ($config['period'] ?? '')];
+        }
+
         return [(string) ($config['period'] ?? '')];
     }
 
     private function normalizedPeriod(array $config, string $period): string
     {
-        if (($config['type'] ?? null) === 'monthly') {
+        if (in_array(($config['type'] ?? null), ['monthly', 'multi'], true)) {
             return $period;
         }
 
@@ -555,12 +682,48 @@ class ReportDocumentController extends Controller
         return [];
     }
 
+    private function perPage(Request $request): int
+    {
+        $perPage = $request->integer('per_page', 10);
+
+        return in_array($perPage, [10, 25, 50, 100], true) ? $perPage : 10;
+    }
+
+    private function emptyPaginator(Request $request, int $perPage): LengthAwarePaginator
+    {
+        return new LengthAwarePaginator(
+            collect(),
+            0,
+            $perPage,
+            LengthAwarePaginator::resolveCurrentPage(),
+            ['path' => $request->url(), 'query' => $request->query()],
+        );
+    }
+
+    /** @param Collection<int, mixed> $items */
+    private function paginateCollection(Collection $items, Request $request, int $perPage): LengthAwarePaginator
+    {
+        $page = LengthAwarePaginator::resolveCurrentPage();
+
+        return new LengthAwarePaginator(
+            $items->forPage($page, $perPage)->values(),
+            $items->count(),
+            $perPage,
+            $page,
+            ['path' => $request->url(), 'query' => $request->query()],
+        );
+    }
+
     private function defaultTitle(array $config, string $period, int $year): string
     {
         if (($config['type'] ?? null) === 'monthly') {
             $month = (int) Str::after($period, 'bulan_');
 
             return ($config['title'] ?? 'Laporan').' '.(self::MONTHS[$month] ?? $period).' '.$year;
+        }
+
+        if (($config['rkbmd'] ?? false) === true) {
+            return ($config['title'] ?? 'Dokumen').' '.($config['period_labels'][$period] ?? $period).' '.$year;
         }
 
         return ($config['title'] ?? 'Dokumen').' '.$year;
@@ -574,6 +737,77 @@ class ReportDocumentController extends Controller
         $years[] = $selectedYear;
 
         return collect($years)->unique()->sortDesc()->values()->all();
+    }
+
+    private function searchTerm(Request $request): string
+    {
+        return Str::substr(trim($request->string('search')->toString()), 0, 100);
+    }
+
+    /** @return Builder<ReportDocument> */
+    private function documentsQuery(string $jenis, array $config, int $year, string $search): Builder
+    {
+        $isAssetHolderArchive = $this->isAssetHolderArchive($config);
+        $query = ReportDocument::query()
+            ->with('uploader')
+            ->whereIn('jenis_laporan', $this->reportTypes($jenis, $config));
+
+        if ($isAssetHolderArchive) {
+            $query->with('assetHolder')->where(function (Builder $dateQuery) use ($year): void {
+                $dateQuery->whereYear('tanggal_berita_acara', $year)
+                    ->orWhere(function (Builder $legacyQuery) use ($year): void {
+                        $legacyQuery->whereNull('tanggal_berita_acara')->where('tahun', $year);
+                    });
+            })->orderByDesc('tanggal_berita_acara')->orderByDesc('id');
+        } else {
+            $query->where('tahun', $year)->latest();
+        }
+
+        $this->applyDocumentSearch($query, $search);
+
+        return $query;
+    }
+
+    /** @param Builder<ReportDocument> $query */
+    private function applyDocumentSearch(Builder $query, string $search): void
+    {
+        if ($search === '') {
+            return;
+        }
+
+        $like = '%'.$search.'%';
+        $normalizedSearch = Str::lower($search);
+        $matchingMonths = collect(self::MONTHS)
+            ->filter(fn (string $name): bool => Str::contains(Str::lower($name), $normalizedSearch))
+            ->keys()
+            ->map(fn (int $month): string => "bulan_{$month}")
+            ->all();
+        $matchingApbdPeriods = collect([
+            'apbd_murni' => 'APBD Murni',
+            'apbd_perubahan' => 'APBD Perubahan',
+        ])->filter(fn (string $label): bool => Str::contains(Str::lower($label), $normalizedSearch))
+            ->keys()
+            ->all();
+
+        $query->where(function (Builder $searchQuery) use ($search, $like, $matchingMonths, $matchingApbdPeriods): void {
+            $searchQuery
+                ->where('judul', 'like', $like)
+                ->orWhere('nama_file_asli', 'like', $like)
+                ->orWhere('periode', 'like', $like)
+                ->orWhereHas('uploader', fn (Builder $uploaderQuery) => $uploaderQuery->where('name', 'like', $like));
+
+            if (ctype_digit($search)) {
+                $searchQuery->orWhere('tahun', (int) $search);
+            }
+
+            if ($matchingMonths !== []) {
+                $searchQuery->orWhereIn('periode', $matchingMonths);
+            }
+
+            if ($matchingApbdPeriods !== []) {
+                $searchQuery->orWhereIn('periode', $matchingApbdPeriods);
+            }
+        });
     }
 
     private function ensureFileExists(ReportDocument $document): void

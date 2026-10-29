@@ -61,7 +61,7 @@ class KodefikasiInternalController extends Controller
 
     public function generate(Request $request, Asset $asset, KodeInternalService $service): RedirectResponse
     {
-        $this->authorizeManage($request);
+        $this->ensureActiveAsset($asset);
         $data = $request->validate(['prefix' => ['nullable', 'string', 'max:10']]);
         $code = $service->generate($asset, $data['prefix'] ?? null);
 
@@ -70,7 +70,7 @@ class KodefikasiInternalController extends Controller
 
     public function update(Request $request, Asset $asset, KodeInternalService $service): RedirectResponse
     {
-        $this->authorizeManage($request);
+        $this->ensureActiveAsset($asset);
         $data = $request->validate([
             'kode_internal' => ['required', 'string', 'regex:/^[A-Z]{2,5}\/[0-9]{3,}$/'],
         ], [
@@ -84,7 +84,7 @@ class KodefikasiInternalController extends Controller
 
     public function reset(Request $request, Asset $asset, KodeInternalService $service): RedirectResponse
     {
-        $this->authorizeManage($request);
+        $this->ensureActiveAsset($asset);
         $service->reset($asset);
 
         return back()->with('success', 'Kode internal aset berhasil direset.');
@@ -92,17 +92,16 @@ class KodefikasiInternalController extends Controller
 
     public function bulkGenerate(Request $request, KodeInternalService $service): RedirectResponse
     {
-        $this->authorizeManage($request);
         $result = $service->bulkGenerate();
-        $message = 'Generate massal selesai. Berhasil: '.$result['success'].', perlu ditinjau: '.count($result['review']).'.';
+        $message = 'Generate massal selesai. Berhasil: '.$result['success'].', gagal/perlu ditinjau: '.count($result['review']).'.';
 
         return back()
             ->with('success', $message)
             ->with('bulk_review', $result['review']);
     }
 
-    private function authorizeManage(Request $request): void
+    private function ensureActiveAsset(Asset $asset): void
     {
-        abort_unless(in_array($request->user()?->role, ['admin', 'super_admin'], true), 403);
+        abort_if($asset->tanggal_penghapusan !== null, 404, 'Aset yang sudah dihapus tidak dapat dikodefikasi.');
     }
 }

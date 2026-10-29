@@ -6,7 +6,6 @@ use App\Enums\AssetDisposalStatus;
 use App\Enums\AssetCondition;
 use App\Enums\AssetMaintenanceStatus;
 use App\Enums\LoanStatus;
-use App\Enums\UserRole;
 use App\Http\Requests\DecideAssetDisposalRequest;
 use App\Http\Requests\StoreAssetDisposalRequest;
 use App\Models\Asset;
@@ -73,8 +72,6 @@ class AssetDisposalRequestController extends Controller
 
     public function store(StoreAssetDisposalRequest $request): RedirectResponse
     {
-        abort_unless($this->canCreate($request), 403, 'Pengajuan penghapusan hanya dapat dibuat oleh Tim Aset.');
-
         if (! $this->hasEvidenceSchema()) {
             throw ValidationException::withMessages([
                 'aset_id' => 'Struktur database bukti penghapusan belum tersedia. Jalankan migration fitur penghapusan terlebih dahulu.',
@@ -200,12 +197,6 @@ class AssetDisposalRequestController extends Controller
         DecideAssetDisposalRequest $request,
         AssetDisposalRequest $assetDisposalRequest,
     ): RedirectResponse {
-        abort_if(
-            ! in_array($this->roleValue($request->user()?->role), [UserRole::KasubbagUmumPerencanaan->value, UserRole::SuperAdmin->value], true),
-            403,
-            'Persetujuan penghapusan aset hanya dapat dilakukan oleh Kepala Sub Bagian Perencanaan dan Umum.',
-        );
-
         $decision = AssetDisposalStatus::from($request->validated('decision'));
 
         DB::transaction(function () use ($request, $assetDisposalRequest, $decision): void {
@@ -315,11 +306,6 @@ class AssetDisposalRequestController extends Controller
         );
     }
 
-    private function roleValue(mixed $role): ?string
-    {
-        return $role instanceof UserRole ? $role->value : $role;
-    }
-
     private function ensureDocumentExists(AssetDisposalRequest $assetDisposalRequest): void
     {
         abort_unless(
@@ -336,14 +322,6 @@ class AssetDisposalRequestController extends Controller
             403,
             'Anda tidak memiliki akses ke penghapusan aset.',
         );
-    }
-
-    private function canCreate(Request $request): bool
-    {
-        return in_array($this->roleValue($request->user()?->role), [
-            UserRole::TimAset->value,
-            UserRole::SuperAdmin->value,
-        ], true);
     }
 
     private function eligibleHeavyDamageMutation(Asset $asset): AssetConditionMutation

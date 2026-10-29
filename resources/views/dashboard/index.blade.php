@@ -29,7 +29,19 @@
     $kondisis = $dashboard['kondisi_distribution'];
     $chart = $dashboard['activity_chart'];
     $activities = $dashboard['recent_activities'];
-    $chartMaximum = max(1, ...collect($chart)->flatMap(fn ($item) => [$item['incoming'], $item['borrowed'], $item['disposed']])->all());
+    $chartSeries = [
+        ['key' => 'incoming', 'label' => 'Barang Masuk', 'color' => 'bg-[#2384c6]'],
+        ['key' => 'borrowed', 'label' => 'Dipinjam', 'color' => 'bg-[#43ad89]'],
+        ['key' => 'returned', 'label' => 'Dikembalikan', 'color' => 'bg-[#7b4bd6]'],
+        ['key' => 'maintenance', 'label' => 'Pemeliharaan', 'color' => 'bg-[#d7a742]'],
+        ['key' => 'condition_changed', 'label' => 'Perubahan Kondisi', 'color' => 'bg-[#f97316]'],
+        ['key' => 'disposed', 'label' => 'Dihapus', 'color' => 'bg-[#dc6b58]'],
+    ];
+    $chartItem = $chart[0] ?? array_merge(['month' => now()->format('Y-m')], array_fill_keys(collect($chartSeries)->pluck('key')->all(), 0));
+    $selectedActivityMonth = $chartItem['month'];
+    $selectedActivityMonthLabel = \Carbon\Carbon::createFromFormat('Y-m', $selectedActivityMonth)->locale('id')->translatedFormat('F Y');
+    $chartValues = collect($chartSeries)->map(fn ($series) => (int) ($chartItem[$series['key']] ?? 0));
+    $chartMaximum = max(1, ...$chartValues->all());
     $totalCondition = max(1, array_sum($kondisis));
     $baikDeg = ($kondisis['baik'] / $totalCondition) * 360;
     $rusakRinganDeg = (($kondisis['baik'] + $kondisis['rusak_ringan']) / $totalCondition) * 360;
@@ -508,23 +520,36 @@
 
     <section class="mt-5 grid grid-cols-[minmax(0,1fr)_470px] gap-5 max-[1180px]:grid-cols-1">
         <article class="min-w-0 rounded-[14px] border border-[#e3e9f0] bg-white p-[22px] shadow-[0_8px_22px_rgb(35_63_92_/_4%)]">
-            <header><h2 class="m-0 mb-[3px] text-[15px] font-extrabold text-[#20364f]">Aktivitas Aset</h2><p class="m-0 text-[10px] text-[#94a0af]">Pergerakan unit selama enam bulan terakhir</p></header>
-            <div class="mt-1 flex justify-end gap-5 text-[10px] text-[#617188]">
-                <span class="inline-flex items-center gap-1.5"><i class="h-2 w-2 rounded-sm bg-[#2384c6]"></i>Barang masuk</span>
-                <span class="inline-flex items-center gap-1.5"><i class="h-2 w-2 rounded-sm bg-[#43ad89]"></i>Dipinjam</span>
-                <span class="inline-flex items-center gap-1.5"><i class="h-2 w-2 rounded-sm bg-[#e58b62]"></i>Dihapus</span>
-            </div>
-            <div class="mt-8 grid h-[230px] grid-cols-6 items-end gap-4 border-b border-[#e3e9f0] px-3">
-                @foreach ($chart as $item)
-                    <div class="grid h-full grid-rows-[1fr_auto] justify-items-center gap-2">
-                        <div class="flex h-full items-end gap-1.5">
-                            <span class="block w-2.5 rounded-t-full bg-[#2384c6]" title="{{ $item['incoming'] }} barang masuk" style="height: {{ max($item['incoming'] ? 8 : 0, $item['incoming'] / $chartMaximum * 100) }}%"></span>
-                            <span class="block w-2.5 rounded-t-full bg-[#43ad89]" title="{{ $item['borrowed'] }} dipinjam" style="height: {{ max($item['borrowed'] ? 8 : 0, $item['borrowed'] / $chartMaximum * 100) }}%"></span>
-                            <span class="block w-2.5 rounded-t-full bg-[#e58b62]" title="{{ $item['disposed'] }} dihapus" style="height: {{ max($item['disposed'] ? 8 : 0, $item['disposed'] / $chartMaximum * 100) }}%"></span>
+            <header class="flex flex-wrap items-start justify-between gap-3">
+                <div><h2 class="m-0 mb-[3px] text-[15px] font-extrabold text-[#20364f]">Aktivitas Aset</h2><p class="m-0 text-[10px] text-[#94a0af]">Pergerakan unit aset pada {{ $selectedActivityMonthLabel }}.</p></div>
+                <form method="GET" action="{{ route('dashboard') }}" class="flex items-center gap-2">
+                    @if (request()->has('tahun'))
+                        <input type="hidden" name="tahun" value="{{ request('tahun') }}">
+                    @endif
+                    <label for="activity_month" class="text-[9px] font-semibold text-[#617188]">Pilih Bulan</label>
+                    <select id="activity_month" name="activity_month" class="rounded-md border border-[#d9e2ec] bg-white px-2 py-1 text-[10px] font-semibold text-[#20364f] outline-none focus:border-[#2384c6]" style="font-size: 10px" onchange="this.form.submit()">
+                        @foreach (range(1, 12) as $monthNumber)
+                            @php($monthOption = \Carbon\Carbon::create(now()->year, $monthNumber, 1, 0, 0, 0, config('app.timezone')))
+                            <option value="{{ $monthOption->format('Y-m') }}" @selected($selectedActivityMonth === $monthOption->format('Y-m'))>{{ $monthOption->locale('id')->translatedFormat('F') }}</option>
+                        @endforeach
+                    </select>
+                </form>
+            </header>
+            <div class="mt-6 overflow-x-auto">
+                <div class="grid h-[230px] min-w-[600px] grid-cols-6 items-end gap-5 border-b border-[#e3e9f0] px-4 sm:gap-7">
+                    @foreach ($chartSeries as $series)
+                        @php($value = (int) ($chartItem[$series['key']] ?? 0))
+                        <div class="grid h-full grid-rows-[1fr_auto] justify-items-center gap-2">
+                            <div class="flex h-full flex-col items-center justify-end">
+                                <span class="mb-1 text-[10px] font-bold text-[#52657d]">{{ $number($value) }}</span>
+                                @if ($value > 0)
+                                    <span class="block w-7 rounded-t-[6px] {{ $series['color'] }} sm:w-8" title="{{ $series['label'] }} · {{ $selectedActivityMonthLabel }}: {{ $number($value) }} unit" style="height: {{ max(8, $value / $chartMaximum * 100) }}%"></span>
+                                @endif
+                            </div>
+                            <small class="max-w-[82px] text-center text-[10px] font-medium leading-4 text-[#617188]">{{ $series['label'] }}</small>
                         </div>
-                        <small class="text-[10px] text-[#74839a]">{{ \Carbon\Carbon::createFromFormat('Y-m', $item['month'])->translatedFormat('M') }}</small>
-                    </div>
-                @endforeach
+                    @endforeach
+                </div>
             </div>
         </article>
 

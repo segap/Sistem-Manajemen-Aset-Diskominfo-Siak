@@ -8,6 +8,7 @@ use App\Enums\ProcurementStatus;
 use App\Enums\UserRole;
 use App\Http\Requests\ReceiveProcurementRequest;
 use App\Http\Requests\StoreProcurementRequest;
+use App\Http\Requests\UpdateProcurementRequest;
 use App\Http\Requests\VerifyIncomingProcurementRequest;
 use App\Models\Asset;
 use App\Models\AssetCategory;
@@ -16,6 +17,7 @@ use App\Models\ProcurementProposal;
 use App\Services\KodeInternalService;
 use App\Services\AssetConditionStockService;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -56,8 +58,6 @@ class ProcurementController extends Controller
 
     public function store(StoreProcurementRequest $request): RedirectResponse
     {
-        abort_if(! $this->hasRole($request, [UserRole::Admin, UserRole::TimAset]), 403, 'Pengadaan hanya dapat dicatat oleh Admin atau Tim Aset.');
-
         DB::transaction(function () use ($request): void {
             $proposalId = $request->validated('usulan_pengadaan_id');
             $proposal = ProcurementProposal::query()->lockForUpdate()->findOrFail($proposalId);
@@ -71,6 +71,12 @@ class ProcurementController extends Controller
             if (Procurement::query()->where('usulan_pengadaan_id', $proposalId)->exists()) {
                 throw ValidationException::withMessages([
                     'usulan_pengadaan_id' => 'Usulan ini sudah diproses menjadi pengadaan.',
+                ]);
+            }
+
+            if ($proposal->details()->exists()) {
+                throw ValidationException::withMessages([
+                    'usulan_pengadaan_id' => 'Usulan multi-barang belum dapat diproses melalui alur Pengadaan Barang satu-barang.',
                 ]);
             }
 
@@ -97,10 +103,46 @@ class ProcurementController extends Controller
         ]);
     }
 
+    public function update(UpdateProcurementRequest $request, Procurement $procurement): RedirectResponse
+    {
+        DB::transaction(function () use ($request, $procurement): void {
+            $locked = Procurement::query()->lockForUpdate()->findOrFail($procurement->id);
+
+            $this->ensureUnprocessed($locked, 'diubah');
+
+            // Nilai yang berasal dari usulan, identitas pembuat, dan status tidak pernah diperbarui dari form ini.
+            $locked->update($request->validated());
+        });
+
+        return back()->with('success', 'Pengadaan berhasil diperbarui.');
+    }
+
+    public function destroy(Request $request, Procurement $procurement): RedirectResponse
+    {
+        $role = $request->user()?->role;
+        $roleValue = $role instanceof UserRole ? $role->value : $role;
+
+        abort_unless($roleValue === UserRole::SuperAdmin->value, 403, 'Hanya Super Admin yang dapat menghapus pengadaan.');
+
+        try {
+            DB::transaction(function () use ($procurement): void {
+                $locked = Procurement::query()->lockForUpdate()->findOrFail($procurement->id);
+
+                $this->ensureUnprocessed($locked, 'dihapus');
+
+                $locked->delete();
+            });
+        } catch (QueryException) {
+            return back()->withErrors([
+                'delete' => 'Pengadaan tidak dapat dihapus karena masih terhubung dengan data lain yang harus dipertahankan.',
+            ]);
+        }
+
+        return back()->with('success', 'Pengadaan berhasil dihapus secara permanen.');
+    }
+
     public function receive(ReceiveProcurementRequest $request, Procurement $procurement): RedirectResponse
     {
-        abort_if(! $this->hasRole($request, [UserRole::Admin, UserRole::TimAset]), 403, 'Penerimaan pengadaan hanya dapat dicatat oleh Admin atau Tim Aset.');
-
         $proofPath = $request->file('bukti_penerimaan')->store('procurements/receipts', 'public');
 
         try {
@@ -138,10 +180,13 @@ class ProcurementController extends Controller
 
     public function verify(VerifyIncomingProcurementRequest $request, Procurement $procurement, KodeInternalService $kodeInternalService, AssetConditionStockService $conditionStockService): RedirectResponse
     {
-        abort_if(! $this->hasRole($request, [UserRole::TimAset]), 403, 'Verifikasi pengadaan hanya dapat dilakukan oleh Tim Aset.');
+        $this->ensureAssetRelationTableAvailable();
 
         DB::transaction(function () use ($request, $procurement, $kodeInternalService, $conditionStockService): void {
             $locked = Procurement::query()->lockForUpdate()->findOrFail($procurement->id);
+
+            // Ulangi pemeriksaan setelah lock agar tidak ada efek samping bila struktur berubah saat request berjalan.
+            $this->ensureAssetRelationTableAvailable();
 
             if ($locked->status !== ProcurementStatus::Received) {
                 throw ValidationException::withMessages([
@@ -194,8 +239,19 @@ class ProcurementController extends Controller
                 'aset_id' => $assetId,
             ]);
 
-            if ($decision === ProcurementStatus::Verified && Schema::hasTable('pengadaan_aset') && $createdAssetIds !== []) {
+            if ($decision === ProcurementStatus::Verified && $createdAssetIds !== []) {
                 $locked->assets()->syncWithoutDetaching($createdAssetIds);
+
+                $linkedAssetCount = $locked->assets()
+                    ->whereIn('aset.id', $createdAssetIds)
+                    ->distinct()
+                    ->count('aset.id');
+
+                if ($linkedAssetCount !== count($createdAssetIds)) {
+                    throw ValidationException::withMessages([
+                        'status' => 'Verifikasi pengadaan gagal karena relasi seluruh aset tidak dapat disimpan.',
+                    ]);
+                }
             }
         });
 
@@ -208,15 +264,68 @@ class ProcurementController extends Controller
             ->with(['requester', 'procurement'])
             ->where('status', ProcurementProposalStatus::Approved->value)
             ->whereDoesntHave('procurement')
+            ->doesntHave('details')
             ->latest()
             ->limit(100)
             ->get();
     }
 
+    private function ensureUnprocessed(Procurement $procurement, string $action): void
+    {
+        if ($procurement->status !== ProcurementStatus::Ordered) {
+            throw ValidationException::withMessages([
+                'status' => "Pengadaan tidak dapat {$action} karena sudah masuk proses penerimaan atau verifikasi.",
+            ]);
+        }
+
+        if ($procurement->jumlah_diterima !== null
+            || $procurement->tanggal_penerimaan !== null
+            || $procurement->diterima_oleh !== null
+            || $procurement->catatan_penerimaan !== null
+            || $procurement->bukti_penerimaan !== null
+            || $procurement->diverifikasi_oleh !== null
+            || $procurement->tanggal_verifikasi !== null
+            || $procurement->kondisi !== null
+            || $procurement->lokasi_penyimpanan !== null
+            || $procurement->catatan_verifikasi !== null
+            || $procurement->alasan_penolakan !== null) {
+            throw ValidationException::withMessages([
+                'status' => "Pengadaan tidak dapat {$action} karena memiliki data penerimaan atau verifikasi.",
+            ]);
+        }
+
+        if ($procurement->asset()->exists()) {
+            throw ValidationException::withMessages([
+                'status' => "Pengadaan tidak dapat {$action} karena sudah terhubung dengan aset.",
+            ]);
+        }
+
+        if (Schema::hasTable('pengadaan_aset') && $procurement->assets()->exists()) {
+            throw ValidationException::withMessages([
+                'status' => "Pengadaan tidak dapat {$action} karena sudah menghasilkan aset terkait.",
+            ]);
+        }
+    }
+
+    private function ensureAssetRelationTableAvailable(): void
+    {
+        if (! Schema::hasTable('pengadaan_aset')) {
+            throw ValidationException::withMessages([
+                'status' => 'Verifikasi pengadaan belum dapat diproses karena konfigurasi relasi aset belum tersedia. Hubungi administrator.',
+            ]);
+        }
+    }
+
     /** @return list<string> */
     private function relations(): array
     {
-        return ['proposal.requester', 'category', 'creator', 'receiver', 'verifier', 'asset'];
+        $relations = ['proposal.requester', 'category', 'creator', 'receiver', 'verifier', 'asset'];
+
+        if (Schema::hasTable('pengadaan_aset')) {
+            $relations[] = 'assets';
+        }
+
+        return $relations;
     }
 
     /** @param list<UserRole> $roles */

@@ -29,6 +29,7 @@ class AssetReportController extends Controller
             'categories' => AssetCategory::query()->orderBy('nama_kategori')->get(),
             'stockCategories' => StockOpnameCategory::query()->orderBy('nama_kategori')->get(),
             'conditions' => AssetCondition::cases(),
+            'canExport' => $request->user()?->hasPermission('laporan_aset.export') ?? false,
         ]);
     }
 
@@ -68,7 +69,7 @@ class AssetReportController extends Controller
         $sheet = $spreadsheet->getActiveSheet();
         $sheet->setTitle($type === 'stock_opname' ? 'Stock Opname' : 'Laporan Aset');
         $headers = $type === 'stock_opname'
-            ? ['No', 'Kode Internal', 'Nama Barang', 'Kategori', 'Satuan', 'Total Stok', 'Stok Tersedia', 'Status Stok', 'Status Verifikasi']
+            ? ['No', 'Kode Internal', 'Nama Barang', 'Kategori', 'Satuan', 'Total Stok', 'Stok Tersedia', 'Status Stok']
             : ($type === 'all'
                 ? ['No', 'Sumber Data', 'Kode Internal', 'Nama Barang', 'Kategori', 'Jumlah', 'Satuan', 'Keterangan Status']
                 : ['No', 'Kode Internal', 'Nama Barang', 'Kategori', 'Merek/Tipe', 'Jumlah', 'Tersedia', 'Reservasi', 'Dipinjam', 'Kondisi', 'Tahun', 'Lokasi', 'Status']);
@@ -76,7 +77,7 @@ class AssetReportController extends Controller
 
         foreach ($rows as $index => $row) {
             $data = $type === 'stock_opname'
-                ? [$index + 1, $row['display_code'], $row['nama_barang'], $row['kategori'], $row['satuan'], $row['stok'], $row['tersedia'], $row['label_stock_status'], $row['label_verification']]
+                ? [$index + 1, $row['display_code'], $row['nama_barang'], $row['kategori'], $row['satuan'], $row['stok'], $row['tersedia'], $row['label_stock_status']]
                 : ($type === 'all'
                     ? [$index + 1, $row['source'], $row['display_code'], $row['nama_barang'], $row['kategori'], $row['jumlah'], $row['satuan'] ?? '-', $row['status'] ?? $row['label_kondisi']]
                     : [$index + 1, $row['display_code'], $row['nama_aset'], $row['kategori'], $row['merek_tipe'], $row['jumlah'], $row['tersedia'], $row['direservasi'], $row['dipinjam'], $row['label_kondisi'], $row['tahun_perolehan'], $row['lokasi_penyimpanan'], $row['label_status_siklus']]);

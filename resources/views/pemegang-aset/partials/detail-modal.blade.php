@@ -10,7 +10,7 @@
     <section class="w-[min(820px,100%)] max-h-[calc(100vh-48px)] overflow-y-auto rounded-2xl bg-white shadow-[0_25px_80px_rgb(2_19_34_/_28%)] animate-[modalZoomIn_.24s_cubic-bezier(.2,.8,.2,1)_both]" role="dialog" aria-modal="true">
         <header class="flex min-h-[83px] items-center justify-between border-b border-[#edf1f5] px-[22px] py-[17px]">
             <div>
-                <h2 class="m-0 mt-[3px] text-xl font-extrabold text-[#0b2b50]">Detail Pemegang Aset</h2>
+                <h2 class="m-0 mt-[3px] text-xl font-extrabold text-[#0b2b50]">Detail Pegawai</h2>
                 <p class="m-0 mt-1 text-[11px] text-[#7f8ea1]">Informasi pegawai dan penanggung jawab aset.</p>
             </div>
             <button class="inline-flex h-[34px] w-[34px] items-center justify-center rounded-[9px] border-0 bg-[#f2f5f8] text-[#8291a2]" type="button" data-modal-close aria-label="Tutup">
@@ -34,6 +34,7 @@
                     <div class="border-b border-[#edf1f5] p-4"><small class="block text-[9px] font-bold uppercase text-[#7f8ea1]">Unit Kerja</small><strong class="text-[12px] text-[#0b2b50]">{{ WorkUnit::labelFor($holder->unit_kerja) }}</strong></div>
                     <div class="border-b border-r border-[#edf1f5] p-4 max-[620px]:border-r-0"><small class="block text-[9px] font-bold uppercase text-[#7f8ea1]">Jabatan</small><strong class="text-[12px] text-[#0b2b50]">{{ $holder->jabatan }}</strong></div>
                     <div class="border-b border-[#edf1f5] p-4"><small class="block text-[9px] font-bold uppercase text-[#7f8ea1]">Nomor HP</small><strong class="text-[12px] text-[#0b2b50]">{{ $holder->nomor_hp ?: '-' }}</strong></div>
+                    <div class="col-span-2 border-b border-[#edf1f5] p-4 max-[620px]:col-span-1"><small class="block text-[9px] font-bold uppercase text-[#7f8ea1]">Alamat Pegawai</small><strong class="whitespace-pre-line text-[12px] text-[#0b2b50]">{{ $holder->alamat ?: '-' }}</strong></div>
                     <div class="border-r border-[#edf1f5] p-4 max-[620px]:border-b max-[620px]:border-r-0"><small class="block text-[9px] font-bold uppercase text-[#7f8ea1]">Email</small><strong class="text-[12px] text-[#0b2b50]">{{ $holder->email ?: '-' }}</strong></div>
                     <div class="p-4"><small class="block text-[9px] font-bold uppercase text-[#7f8ea1]">Dokumen KTP</small>
                         @if ($canViewSensitiveAssetHolderData)
@@ -91,11 +92,11 @@
             </section>
 
             <footer class="flex flex-wrap justify-end gap-2 border-t border-[#edf1f5] pt-[18px]">
-                <a class="page-action-button inline-flex min-h-[38px] items-center justify-center gap-1.5 rounded-[9px] border border-[#dbe3eb] bg-white px-3.5 text-[10px] font-bold text-[#5e7084] no-underline transition hover:border-[#b8c6d6] hover:bg-[#f8fafc]" href="{{ route('pemegang-aset.print', $holder) }}" target="_blank" rel="noopener" title="Cetak data pemegang aset">
+                <a class="page-action-button inline-flex min-h-[38px] items-center justify-center gap-1.5 rounded-[9px] border border-[#dbe3eb] bg-white px-3.5 text-[10px] font-bold text-[#5e7084] no-underline transition hover:border-[#b8c6d6] hover:bg-[#f8fafc]" href="{{ route('pemegang-aset.print', $holder) }}" target="_blank" rel="noopener" title="Cetak data pegawai">
                     <svg class="h-4 w-4 fill-none stroke-current stroke-[1.9]" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9V3h12v6M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2M6 14h12v7H6v-7Z" /></svg>
                     Cetak
                 </a>
-                <a class="page-action-button inline-flex min-h-[38px] items-center justify-center gap-1.5 rounded-[9px] border border-[#dbe3eb] bg-white px-3.5 text-[10px] font-bold text-[#146bb5] no-underline transition hover:border-[#9fc5df] hover:bg-[#f8fafc]" href="{{ route('pemegang-aset.pdf', $holder) }}" title="Unduh PDF data pemegang aset">
+                <a class="page-action-button inline-flex min-h-[38px] items-center justify-center gap-1.5 rounded-[9px] border border-[#dbe3eb] bg-white px-3.5 text-[10px] font-bold text-[#146bb5] no-underline transition hover:border-[#9fc5df] hover:bg-[#f8fafc]" href="{{ route('pemegang-aset.pdf', $holder) }}" title="Unduh PDF data pegawai">
                     <svg class="h-4 w-4 fill-none stroke-current stroke-[1.9]" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6ZM14 2v6h6M8 16h8M8 12h3" /></svg>
                     Unduh PDF
                 </a>
