@@ -20,7 +20,7 @@
 /auth.json
 /node_modules
 /.npm-cache
-/public/build
+
 /public/fonts-manifest.dev.json
 /public/hot
 /public/storage
@@ -45,4 +45,5 @@ Thumbs.db
 /storage/app/*.pdf
 /storage/app/*.xlsx
 /storage/app/*.docx
+
 /referensi-import/
