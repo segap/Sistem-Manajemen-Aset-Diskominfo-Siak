@@ -12,6 +12,7 @@ use App\Models\KodeBarang;
 use App\Models\Ruangan;
 use App\Models\StockOpnameItem;
 use App\Services\AssetConditionStockService;
+use App\Services\DiskominfoAssetImportService;
 use App\Services\KodeInternalService;
 use App\Services\RiwayatPersetujuanService;
 use Illuminate\Database\Eloquent\Builder;
@@ -412,6 +413,7 @@ class AssetController extends Controller
             $kodeBarangValue = trim((string) ($data['kode_barang_id'] ?? ''));
             $payload = [
                 'kategori_aset_id' => $this->resolveImportCategoryId($categoryValue, $categories),
+                'kategori' => $categoryValue,
                 'kode_barang_id' => $this->resolveImportKodeBarangId($kodeBarangValue, $kodeBarangLookup),
                 'kode_internal' => strtoupper(trim((string) ($data['kode_internal'] ?? ''))) ?: null,
                 'nama_aset' => trim((string) ($data['nama_aset'] ?? '')),
@@ -425,7 +427,8 @@ class AssetController extends Controller
             ];
 
             $validator = Validator::make($payload, [
-                'kategori_aset_id' => ['required', 'integer', 'exists:kategori_aset,id'],
+                'kategori' => ['required', 'string', 'max:100'],
+                'kategori_aset_id' => ['nullable', 'integer', 'exists:kategori_aset,id'],
                 'kode_barang_id' => ['nullable', 'integer', 'exists:kode_barang,id'],
                 'kode_internal' => ['nullable', 'string', 'max:30', 'regex:/^[A-Z]{2,5}\/[0-9]{3,}$/', 'unique:aset,kode_internal'],
                 'nama_aset' => ['required', 'string', 'max:150'],
@@ -437,7 +440,7 @@ class AssetController extends Controller
                 'pemasok' => ['nullable', 'string', 'max:150'],
                 'lokasi_penyimpanan' => ['nullable', 'string', 'max:150'],
             ], [
-                'kategori_aset_id.required' => 'Kolom kategori wajib diisi.',
+                'kategori.required' => 'Kolom kategori wajib diisi.',
                 'kategori_aset_id.exists' => 'Kategori "'.$categoryValue.'" tidak ditemukan.',
                 'kode_barang_id.exists' => 'Kode barang "'.$kodeBarangValue.'" tidak ditemukan di master Kode Barang.',
                 'kode_internal.regex' => 'Format kode_internal harus seperti PRN/001.',
@@ -476,8 +479,11 @@ class AssetController extends Controller
         $internalCodeReview = [];
         $totalUnits = collect($payloads)->sum(fn (array $payload): int => (int) $payload['jumlah']);
 
-        DB::transaction(function () use ($payloads, $kodeInternalService, $conditionStockService, &$internalCodeReview): void {
+        DB::transaction(function () use ($payloads, $categories, $kodeInternalService, $conditionStockService, &$internalCodeReview): void {
             foreach ($payloads as $payload) {
+                $payload['kategori_aset_id'] ??= $this->resolveOrCreateImportCategoryId($payload['kategori'], $categories);
+                unset($payload['kategori']);
+
                 $unitCount = (int) $payload['jumlah'];
                 $payload['jumlah'] = 1;
 
@@ -485,14 +491,15 @@ class AssetController extends Controller
                     $asset = Asset::query()->create([
                         ...$payload,
                         'kode_internal' => $unit === 1 ? $payload['kode_internal'] : null,
-                        'status_verifikasi' => 'menunggu_verifikasi',
-                        'tanggal_verifikasi' => null,
+                        'status_verifikasi' => 'disetujui',
+                        'tanggal_verifikasi' => now(),
                         'diverifikasi_oleh' => null,
-                        'catatan_verifikasi' => null,
+                        'catatan_verifikasi' => 'Disetujui otomatis melalui Import Excel.',
                     ]);
 
                     $conditionStockService->resetToMainCondition($asset);
-                    app(RiwayatPersetujuanService::class)->record('asset_verification', $asset, 'pengajuan', 'dibuat', 'Dibuat dari import Excel aset.', request()->user());
+                    app(RiwayatPersetujuanService::class)->record('asset_verification', $asset, 'pengajuan', 'dibuat', 'Dibuat melalui Import Excel.', request()->user());
+                    app(RiwayatPersetujuanService::class)->record('asset_verification', $asset, 'import_excel', 'disetujui_otomatis', 'Disetujui otomatis berdasarkan metode Import Excel.');
 
                     if ($asset->kode_internal) {
                         $kodeInternalService->rememberExistingCode($asset);
@@ -504,11 +511,91 @@ class AssetController extends Controller
             }
         });
 
-        $redirect = back()->with('success', $totalUnits.' unit aset dari '.count($payloads).' baris Excel berhasil diimport dan menunggu verifikasi Tim Aset.');
+        $redirect = back()->with('success', $totalUnits.' unit aset dari '.count($payloads).' baris Excel berhasil diimport dan langsung disetujui.');
 
         return $internalCodeReview === []
             ? $redirect
             : $redirect->with('warning', implode(' ', array_slice($internalCodeReview, 0, 5)).' Silakan selesaikan melalui menu Kodefikasi Internal.');
+    }
+
+    public function diskominfoImportPreview(Request $request, DiskominfoAssetImportService $importService): RedirectResponse
+    {
+        $request->validate([
+            'file' => ['required', 'file', 'mimes:xlsx', 'max:10240'],
+        ], [
+            'file.required' => 'File Excel wajib dipilih.',
+            'file.mimes' => 'Inventaris Diskominfo harus berformat XLSX.',
+            'file.max' => 'Ukuran file maksimal 10 MB.',
+        ]);
+
+        $path = $request->file('file')->store('asset-import-previews', 'local');
+
+        try {
+            $preview = $importService->preview(Storage::disk('local')->path($path));
+        } catch (Throwable $exception) {
+            Storage::disk('local')->delete($path);
+            throw $exception;
+        }
+
+        $token = (string) Str::uuid();
+        $imports = $request->session()->get('diskominfo_asset_imports', []);
+        $imports[$token] = [
+            'path' => $path,
+            'hash' => $preview['hash'],
+            'filename' => $request->file('file')->getClientOriginalName(),
+            'created_at' => now()->timestamp,
+        ];
+        $request->session()->put('diskominfo_asset_imports', $imports);
+
+        return back()
+            ->with('diskominfo_asset_import_preview', $preview)
+            ->with('diskominfo_asset_import_token', $token)
+            ->with('_modal', 'import-assets');
+    }
+
+    public function diskominfoImportConfirm(Request $request, DiskominfoAssetImportService $importService, AssetConditionStockService $conditionStockService, KodeInternalService $kodeInternalService): RedirectResponse
+    {
+        $request->validate([
+            'token' => ['required', 'uuid'],
+            'categories' => ['required', 'array'],
+            'holders' => ['nullable', 'array'],
+            'conditions' => ['nullable', 'array'],
+        ]);
+
+        $imports = $request->session()->get('diskominfo_asset_imports', []);
+        $entry = $imports[$request->string('token')->toString()] ?? null;
+        if (! $entry || ! Storage::disk('local')->exists($entry['path'])) {
+            throw ValidationException::withMessages(['file' => 'Sesi preview sudah berakhir. Upload dan periksa file kembali.']);
+        }
+
+        try {
+            if (hash_file('sha256', Storage::disk('local')->path($entry['path'])) !== $entry['hash']) {
+                throw ValidationException::withMessages(['file' => 'File preview berubah. Upload ulang file untuk keamanan.']);
+            }
+            $total = $importService->confirm(
+                Storage::disk('local')->path($entry['path']),
+                $entry['filename'],
+                $request->user(),
+                $request->input('categories', []),
+                $request->input('holders', []),
+                $request->input('conditions', []),
+                $conditionStockService,
+                $kodeInternalService,
+            );
+        } catch (ValidationException $exception) {
+            return back()
+                ->withInput()
+                ->withErrors($exception->errors())
+                ->with('diskominfo_asset_import_preview', $importService->preview(Storage::disk('local')->path($entry['path']), $request->input('conditions', []), $request->input('holders', [])))
+                ->with('diskominfo_asset_import_token', $request->string('token')->toString())
+                ->with('_modal', 'import-assets');
+        }
+
+        Storage::disk('local')->delete($entry['path']);
+        unset($imports[$request->string('token')->toString()]);
+        $request->session()->put('diskominfo_asset_imports', $imports);
+
+        return back()->with('success', $total.' unit aset Inventaris Diskominfo berhasil diimport dan langsung disetujui.');
     }
 
     public function importTemplate()
@@ -584,6 +671,8 @@ class AssetController extends Controller
             'kodeBarangOptions' => KodeBarang::query()->orderBy('kode_barang')->limit(500)->get(['id', 'kode_barang', 'nama_barang']),
             'ruanganOptions' => Ruangan::query()->orderBy('nama_ruangan')->get(['id', 'kode_ruangan', 'nama_ruangan']),
             'assetHolderOptions' => $activeAssetHolders,
+            'diskominfoImportPreview' => session('diskominfo_asset_import_preview'),
+            'diskominfoImportToken' => session('diskominfo_asset_import_token'),
             'verificationMode' => $verificationMode,
             'conditions' => $this->conditionOptions(),
             'verificationOptions' => $this->verificationOptions(),
@@ -726,6 +815,20 @@ class AssetController extends Controller
         if (isset($categories[$key])) {
             return (int) $categories[$key];
         }
+
+        return null;
+    }
+
+    private function resolveOrCreateImportCategoryId(string $value, $categories): int
+    {
+        $existingCategoryId = $this->resolveImportCategoryId($value, $categories);
+
+        if ($existingCategoryId !== null) {
+            return $existingCategoryId;
+        }
+
+        $value = trim($value);
+        $key = $this->normalizeLookup($value);
 
         $baseCode = Str::of($value)->ascii()->upper()->replaceMatches('/[^A-Z0-9]+/', '_')->trim('_')->substr(0, 24)->toString();
         $baseCode = $baseCode !== '' ? $baseCode : 'KATEGORI';

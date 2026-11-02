@@ -247,6 +247,12 @@ Route::middleware(['auth', 'permission:aset.view'])->group(function () {
     Route::post('/aset/impor', [AssetController::class, 'import'])
         ->middleware('permission:aset.import')
         ->name('web.aset.impor');
+    Route::post('/aset/impor/diskominfo/preview', [AssetController::class, 'diskominfoImportPreview'])
+        ->middleware('permission:aset.import')
+        ->name('web.aset.impor.diskominfo.preview');
+    Route::post('/aset/impor/diskominfo/confirm', [AssetController::class, 'diskominfoImportConfirm'])
+        ->middleware('permission:aset.import')
+        ->name('web.aset.impor.diskominfo.confirm');
 
     Route::middleware('role:tim_aset')->group(function () {
         Route::get('/verifikasi-barang', [AssetController::class, 'verification'])->name('web.aset.verifikasi.index');

@@ -94,7 +94,7 @@
                             <td>{{ $holder->nama_pegawai }}</td>
                             <td>{{ $holder->nip ?: '-' }}</td>
                             <td>{{ WorkUnit::labelFor($holder->unit_kerja) }}</td>
-                            <td>{{ $holder->jabatan }}</td>
+                            <td>{{ $holder->jabatan ?: '-' }}</td>
                             <td>{{ $holder->email ?: '-' }}</td>
                             <td>{{ $holder->nomor_hp ?: '-' }}</td>
                             <td class="min-w-[190px]">{{ $holder->alamat ?: '-' }}</td>

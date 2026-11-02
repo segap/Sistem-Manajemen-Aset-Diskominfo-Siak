@@ -4,6 +4,7 @@ namespace App\Enums;
 
 enum WorkUnit: string
 {
+    case Secretariat = 'secretariat';
     case SecretariatPlanningGeneral = 'secretariat_planning_general';
     case SecretariatFinanceStaffing = 'secretariat_finance_staffing';
     case Aptika = 'aptika';
@@ -13,6 +14,7 @@ enum WorkUnit: string
     public function label(): string
     {
         return match ($this) {
+            self::Secretariat => 'Sekretariat',
             self::SecretariatPlanningGeneral => 'Sekretariat - Subbag Perencanaan dan Umum',
             self::SecretariatFinanceStaffing => 'Sekretariat - Subbag Keuangan dan Kepegawaian',
             self::Aptika => 'Bidang APTIKA',

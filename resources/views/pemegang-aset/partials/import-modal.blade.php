@@ -16,7 +16,7 @@
             @endif
 
             <div class="rounded-[12px] border border-[#dbeafe] bg-[#f8fbff] p-4 text-[11px] leading-relaxed text-[#53677d]">
-                Format file harus <strong>.xlsx</strong>, maksimal <strong>5 MB</strong>. Kolom yang dibaca: Nama Pegawai, NIP, Email, Unit Kerja, Jabatan, Nomor HP, NIK, dan Alamat <em>(opsional)</em>.
+                Format file harus <strong>.xlsx</strong>, maksimal <strong>5 MB</strong>. Kolom wajib: <strong>Nama Pegawai</strong> dan <strong>Unit Kerja</strong>. NIP, Email, Jabatan, Nomor HP, NIK, dan Alamat bersifat opsional.
             </div>
 
             <a class="page-action-button inline-flex min-h-[38px] w-max items-center justify-center rounded-[9px] border border-[#dbe3eb] bg-white px-3.5 text-[10px] font-bold text-[#146bb5] no-underline transition hover:bg-[#f8fafc]" href="{{ route('pemegang-aset.template-impor') }}">
@@ -54,6 +54,16 @@
                                     <li>{{ $error }}</li>
                                 @endforeach
                             </ul>
+                        </div>
+                    @endif
+
+                    @if (($importPreview['unknown_work_units'] ?? []) !== [])
+                        <div class="overflow-x-auto rounded-[10px] border border-[#fecdca] bg-white text-[10px] text-[#5e7084]">
+                            <div class="border-b border-[#fecdca] bg-[#fef3f2] px-3 py-2 font-bold text-[#b42318]">Nilai Unit Kerja yang belum dikenali</div>
+                            <table class="w-full min-w-[480px] border-collapse text-left">
+                                <thead class="bg-[#fff8f7] text-[9px] uppercase text-[#8f514d]"><tr><th class="px-3 py-2">Nilai Excel</th><th class="px-3 py-2 text-center">Jumlah</th><th class="px-3 py-2">Baris</th></tr></thead>
+                                <tbody>@foreach ($importPreview['unknown_work_units'] as $unknownUnit)<tr class="border-t border-[#fce0dd]"><td class="px-3 py-2 font-semibold">{{ $unknownUnit['value'] }}</td><td class="px-3 py-2 text-center">{{ $unknownUnit['count'] }}</td><td class="px-3 py-2">{{ implode(', ', $unknownUnit['rows']) }}</td></tr>@endforeach</tbody>
+                            </table>
                         </div>
                     @endif
 

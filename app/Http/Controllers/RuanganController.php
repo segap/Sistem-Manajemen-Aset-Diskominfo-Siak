@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
@@ -18,22 +19,29 @@ class RuanganController extends Controller
 {
     public function index(Request $request): View
     {
+        $hasAssetHolderColumn = Schema::hasColumn('ruangan', 'pemegang_aset_id');
         $perPage = min(max($request->integer('per_page', 10), 1), 100);
         $status = RuanganStatus::tryFrom($request->string('status')->toString());
 
         $ruangan = Ruangan::query()
-            ->with(['penanggungJawab', 'pemegangAset'])
-            ->when($request->filled('search'), function (Builder $query) use ($request): void {
+            ->with(array_filter([
+                'penanggungJawab',
+                $hasAssetHolderColumn ? 'pemegangAset' : null,
+            ]))
+            ->when($request->filled('search'), function (Builder $query) use ($request, $hasAssetHolderColumn): void {
                 $search = $request->string('search')->toString();
-                $query->where(function (Builder $query) use ($search): void {
+                $query->where(function (Builder $query) use ($search, $hasAssetHolderColumn): void {
                     $query->where('kode_ruangan', 'like', "%{$search}%")
                         ->orWhere('nama_ruangan', 'like', "%{$search}%")
                         ->orWhereHas('penanggungJawab', fn (Builder $query) => $query
                             ->where('name', 'like', "%{$search}%")
-                            ->orWhere('email', 'like', "%{$search}%"))
-                        ->orWhereHas('pemegangAset', fn (Builder $query) => $query
+                            ->orWhere('email', 'like', "%{$search}%"));
+
+                    if ($hasAssetHolderColumn) {
+                        $query->orWhereHas('pemegangAset', fn (Builder $query) => $query
                             ->where('nama_pegawai', 'like', "%{$search}%")
                             ->orWhere('email', 'like', "%{$search}%"));
+                    }
                 });
             })
             ->when($status, fn (Builder $query) => $query->where('status', $status->value))
@@ -49,23 +57,46 @@ class RuanganController extends Controller
                 ->get(['id', 'nama_pegawai', 'unit_kerja']),
             'kodeLokasiOptions' => KodeLokasi::query()->orderBy('kode_lokasi')->limit(500)->get(['id', 'kode_lokasi', 'nama_lokasi']),
             'statuses' => RuanganStatus::cases(),
+            'hasAssetHolderColumn' => $hasAssetHolderColumn,
         ]);
     }
 
     public function store(RuanganRequest $request): RedirectResponse
     {
-        Ruangan::query()->create($request->validated());
+        $data = $request->validated();
+        $hasAssetHolderColumn = Schema::hasColumn('ruangan', 'pemegang_aset_id');
+        if (! $hasAssetHolderColumn) {
+            unset($data['pemegang_aset_id']);
+        }
 
-        return redirect()->route('ruangan.index')->with('success', 'Ruangan berhasil ditambahkan.');
+        Ruangan::query()->create($data);
+
+        return redirect()->route('ruangan.index')->with(
+            $hasAssetHolderColumn ? 'success' : 'warning',
+            $hasAssetHolderColumn
+                ? 'Ruangan berhasil ditambahkan.'
+                : 'Ruangan berhasil ditambahkan. Penanggung jawab pegawai belum disimpan karena migration ruangan belum diterapkan.'
+        );
     }
 
     public function update(RuanganRequest $request, Ruangan $ruangan): RedirectResponse
     {
-        $ruangan->update($request->validated());
+        $data = $request->validated();
+        $hasAssetHolderColumn = Schema::hasColumn('ruangan', 'pemegang_aset_id');
+        if (! $hasAssetHolderColumn) {
+            unset($data['pemegang_aset_id']);
+        }
+
+        $ruangan->update($data);
 
         return redirect()
             ->route('ruangan.index', $request->only('search', 'status', 'per_page', 'page'))
-            ->with('success', 'Ruangan berhasil diperbarui.');
+            ->with(
+                $hasAssetHolderColumn ? 'success' : 'warning',
+                $hasAssetHolderColumn
+                    ? 'Ruangan berhasil diperbarui.'
+                    : 'Ruangan berhasil diperbarui. Penanggung jawab pegawai belum disimpan karena migration ruangan belum diterapkan.'
+            );
     }
 
     public function destroy(Request $request, Ruangan $ruangan): RedirectResponse

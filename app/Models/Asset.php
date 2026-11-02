@@ -22,6 +22,7 @@ class Asset extends Model
         'nama_aset',
         'merek_tipe',
         'spesifikasi',
+        'catatan_kondisi',
         'jumlah',
         'tahun_perolehan',
         'kondisi',
@@ -33,6 +34,7 @@ class Asset extends Model
         'google_drive_url',
         'pemasok',
         'pemegang_aset_id',
+        'asset_import_batch_id',
         'lokasi_penyimpanan',
         'tanggal_penghapusan',
     ];
@@ -58,6 +60,11 @@ class Asset extends Model
     public function assetHolder(): BelongsTo
     {
         return $this->belongsTo(AssetHolder::class, 'pemegang_aset_id');
+    }
+
+    public function importBatch(): BelongsTo
+    {
+        return $this->belongsTo(AssetImportBatch::class, 'asset_import_batch_id');
     }
 
     /** @return HasMany<AssetConditionStock, $this> */

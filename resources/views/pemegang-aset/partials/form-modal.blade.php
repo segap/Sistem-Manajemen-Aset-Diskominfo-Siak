@@ -80,14 +80,14 @@
                     <select class="h-[42px] w-full rounded-[9px] border border-[#dce4ec] bg-white px-3 text-[10px] font-normal text-[#34465a] outline-0 transition focus:border-[#6fa9cf] focus:shadow-[0_0_0_3px_rgb(20_107_181_/_8%)]" name="unit_kerja" required>
                         <option value="">Pilih Unit Kerja</option>
                         @foreach ($workUnits as $unitValue => $unitLabel)
-                            <option value="{{ $unitValue }}" @selected($fieldValue('unit_kerja', $holder->unit_kerja ?? '') === $unitValue)>{{ $unitLabel }}</option>
+                            <option value="{{ $unitValue }}" @selected($fieldValue('unit_kerja', $holder->unit_kerja ?? '') === $unitValue)>{{ str_replace('Bidang ', '', $unitLabel) }}</option>
                         @endforeach
                     </select>
                     @error('unit_kerja') <small class="text-[8px] font-medium text-[#b8433b]">{{ $message }}</small> @enderror
                 </label>
                 <label class="grid gap-[7px] text-[11px] font-bold text-[#405267]">
-                    <span>Jabatan <b class="text-[#c44f47]">*</b></span>
-                    <input class="h-[42px] w-full rounded-[9px] border border-[#dce4ec] bg-white px-3 text-[10px] font-normal text-[#34465a] outline-0 transition focus:border-[#6fa9cf] focus:shadow-[0_0_0_3px_rgb(20_107_181_/_8%)]" name="jabatan" value="{{ $fieldValue('jabatan', $holder->jabatan ?? '') }}" required>
+                    <span>Jabatan</span>
+                    <input class="h-[42px] w-full rounded-[9px] border border-[#dce4ec] bg-white px-3 text-[10px] font-normal text-[#34465a] outline-0 transition focus:border-[#6fa9cf] focus:shadow-[0_0_0_3px_rgb(20_107_181_/_8%)]" name="jabatan" value="{{ $fieldValue('jabatan', $holder->jabatan ?? '') }}">
                     @error('jabatan') <small class="text-[8px] font-medium text-[#b8433b]">{{ $message }}</small> @enderror
                 </label>
             </div>

@@ -236,7 +236,7 @@ class AssetHolderController extends Controller
             'Opsional, angka, maksimal 30 digit',
             'Opsional, format email',
             'Wajib, pilih salah satu unit kerja valid',
-            'Wajib, maksimal 150 karakter',
+            'Opsional, maksimal 150 karakter',
             'Opsional, angka/+/-/spasi',
             'Opsional, tepat 16 digit',
             'Opsional, maksimal 1000 karakter',

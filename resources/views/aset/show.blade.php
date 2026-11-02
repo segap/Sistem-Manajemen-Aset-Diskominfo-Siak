@@ -51,6 +51,7 @@
     $assetHolderLabel = $assetHolder
         ? $assetHolder->nama_pegawai.($assetHolder->nip ? ' - NIP '.$assetHolder->nip : '').($assetHolder->is_active ? '' : ' (Nonaktif)')
         : 'Belum ditentukan';
+    $conditionNote = trim((string) $asset->catatan_kondisi);
 @endphp
 
 @section('content')
@@ -114,6 +115,7 @@
                 @include('aset.partials.show-item', ['label' => 'Pemegang Aset', 'value' => $assetHolderLabel])
                 @include('aset.partials.show-item', ['label' => 'Lokasi penyimpanan', 'value' => $asset->lokasi_penyimpanan ?: '-'])
                 @include('aset.partials.show-item', ['label' => in_array($asset->kondisi->value, ['rusak_ringan', 'rusak_sedang', 'rusak_berat', 'hilang'], true) ? 'Spesifikasi / Deskripsi Kerusakan' : 'Spesifikasi', 'value' => $asset->spesifikasi ?: 'Belum ada spesifikasi.', 'wide' => true])
+                @include('aset.partials.show-item', ['label' => 'Catatan Kondisi / Kerusakan', 'value' => $conditionNote !== '' ? $conditionNote : '-', 'wide' => true, 'preserveLines' => true])
             </div>
         </section>
 
