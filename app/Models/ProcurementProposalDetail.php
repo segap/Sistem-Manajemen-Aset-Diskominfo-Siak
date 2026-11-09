@@ -19,6 +19,7 @@ class ProcurementProposalDetail extends Model
         'link_produk',
         'keterangan',
         'penanggung_jawab_id',
+        'pemegang_aset_id',
     ];
 
     public function proposal(): BelongsTo
@@ -29,6 +30,11 @@ class ProcurementProposalDetail extends Model
     public function responsiblePerson(): BelongsTo
     {
         return $this->belongsTo(User::class, 'penanggung_jawab_id');
+    }
+
+    public function responsibleAssetHolder(): BelongsTo
+    {
+        return $this->belongsTo(AssetHolder::class, 'pemegang_aset_id');
     }
 
     /** @return array<string, string> */

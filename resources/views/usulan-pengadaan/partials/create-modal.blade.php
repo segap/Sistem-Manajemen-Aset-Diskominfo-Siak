@@ -2,9 +2,9 @@
     $spendingTypes = \App\Models\ProcurementProposal::spendingTypes();
     $oldDetails = old('details', [[
         'nama_barang' => '', 'spesifikasi' => '', 'jumlah' => 1,
-        'estimasi_harga_satuan' => '', 'link_produk' => '', 'keterangan' => '', 'penanggung_jawab_id' => '',
+        'estimasi_harga_satuan' => '', 'link_produk' => '', 'keterangan' => '', 'pemegang_aset_id' => '',
     ]]);
-    $userOptionLabel = fn ($user) => trim($user->name.($user->nip ? ' - '.$user->nip : ''));
+    $assetHolderOptionLabel = fn ($holder) => trim($holder->nama_pegawai.($holder->nip ? ' - '.$holder->nip : ''));
 @endphp
 
 <div class="fixed inset-0 z-80 hidden place-items-center overflow-y-auto bg-[rgb(5_22_38_/_48%)] p-6 animate-[modalBackdropIn_.2s_ease-out_both] max-[580px]:p-3" data-modal="create-proposal" role="presentation">
@@ -19,7 +19,7 @@
                 <div><span class="block text-[10px] font-bold text-[#718095]">Bidang / Unit Kerja</span><strong class="mt-1 block text-[11px] text-[#0b2b50]">{{ \App\Enums\WorkUnit::labelFor(auth()->user()?->work_unit) }}</strong></div>
                 <div><span class="block text-[10px] font-bold text-[#718095]">Pengaju</span><strong class="mt-1 block text-[11px] text-[#0b2b50]">{{ auth()->user()?->name }}</strong></div>
                 @include('usulan-pengadaan.partials.field', ['label' => 'Tahun anggaran', 'name' => 'tahun_anggaran', 'type' => 'number', 'value' => old('tahun_anggaran', now()->year), 'required' => true, 'attrs' => 'min=2000 max=2100'])
-                @include('usulan-pengadaan.partials.field', ['label' => 'Tanggal pengajuan', 'name' => 'tanggal_pengajuan', 'type' => 'date', 'value' => old('tanggal_pengajuan', now()->toDateString()), 'required' => true])
+                @include('usulan-pengadaan.partials.field', ['label' => 'Tanggal dan waktu pengajuan', 'name' => 'tanggal_pengajuan', 'type' => 'datetime-local', 'value' => old('tanggal_pengajuan', now('Asia/Jakarta')->format('Y-m-d\\TH:i')), 'required' => true])
                 <fieldset class="col-span-full grid gap-[8px] text-[11px] font-bold text-[#405267]">
                     <legend class="leading-none">Jenis Belanja <span class="text-[#c94c45]">*</span></legend>
                     <div class="mt-2 grid grid-cols-2 gap-3 max-[560px]:grid-cols-1">
@@ -40,7 +40,7 @@
                 @foreach ($oldDetails as $index => $detail)
                     <article class="grid gap-4 rounded-[12px] border border-[#dfe7f0] p-4" data-proposal-detail>
                         <div class="flex items-center justify-between gap-3"><strong class="text-[11px] text-[#0b2b50]" data-detail-heading>Barang {{ $index + 1 }}</strong><button class="text-[12px] font-semibold text-[#c94c45]" type="button" data-remove-proposal-detail>Hapus</button></div>
-                        @foreach (['nama_barang', 'spesifikasi', 'jumlah', 'estimasi_harga_satuan', 'link_produk', 'keterangan', 'penanggung_jawab_id'] as $fieldName)
+                        @foreach (['nama_barang', 'spesifikasi', 'jumlah', 'estimasi_harga_satuan', 'link_produk', 'keterangan', 'pemegang_aset_id'] as $fieldName)
                             @error("details.$index.$fieldName") <small class="-mt-2 text-[9px] font-medium text-[#b8433b]">{{ $message }}</small> @enderror
                         @endforeach
                         <div class="grid grid-cols-2 gap-4 max-[700px]:grid-cols-1">
@@ -50,7 +50,7 @@
                         <label class="grid gap-[7px] text-[11px] font-bold text-[#405267]"><span>Spesifikasi</span><textarea class="min-h-20 rounded-[9px] border border-[#dce4ec] px-3 py-3 text-[10px] font-normal outline-0 focus:border-[#6fa9cf]" name="details[{{ $index }}][spesifikasi]" required>{{ $detail['spesifikasi'] ?? '' }}</textarea></label>
                         <div class="grid grid-cols-2 gap-4 max-[700px]:grid-cols-1">
                             @include('usulan-pengadaan.partials.field', ['label' => 'Harga Satuan', 'name' => "details[$index][estimasi_harga_satuan]", 'type' => 'number', 'value' => $detail['estimasi_harga_satuan'] ?? '', 'required' => true, 'attrs' => 'min=0 step=1'])
-                            <label class="grid gap-[7px] text-[11px] font-bold text-[#405267]"><span>Penanggung Jawab <em class="font-normal text-[#8290a3]">(opsional)</em></span><select class="h-[42px] rounded-[9px] border border-[#dce4ec] bg-white px-3 text-[10px] font-normal text-[#34465a]" name="details[{{ $index }}][penanggung_jawab_id]"><option value="">-- Pilih Penanggung Jawab --</option>@foreach ($users as $user)<option value="{{ $user->id }}" @selected((string) ($detail['penanggung_jawab_id'] ?? '') === (string) $user->id)>{{ $userOptionLabel($user) }}</option>@endforeach</select></label>
+                            <label class="grid gap-[7px] text-[11px] font-bold text-[#405267]"><span>Penanggung Jawab <em class="font-normal text-[#8290a3]">(opsional)</em></span><select class="h-[42px] rounded-[9px] border border-[#dce4ec] bg-white px-3 text-[10px] font-normal text-[#34465a]" name="details[{{ $index }}][pemegang_aset_id]"><option value="">-- Pilih Penanggung Jawab --</option>@foreach ($assetHolders as $holder)<option value="{{ $holder->id }}" @selected((string) ($detail['pemegang_aset_id'] ?? '') === (string) $holder->id)>{{ $assetHolderOptionLabel($holder) }}</option>@endforeach</select></label>
                         </div>
                         @include('usulan-pengadaan.partials.field', ['label' => 'Link Produk / Referensi', 'name' => "details[$index][link_produk]", 'type' => 'url', 'value' => $detail['link_produk'] ?? '', 'attrs' => 'placeholder=https://...'])
                         <label class="grid gap-[7px] text-[11px] font-bold text-[#405267]"><span>Keterangan <em class="font-normal text-[#8290a3]">(opsional)</em></span><textarea class="min-h-20 rounded-[9px] border border-[#dce4ec] px-3 py-3 text-[10px] font-normal outline-0 focus:border-[#6fa9cf]" name="details[{{ $index }}][keterangan]">{{ $detail['keterangan'] ?? '' }}</textarea></label>
@@ -67,7 +67,7 @@
         <div class="flex items-center justify-between gap-3"><strong class="text-[11px] text-[#0b2b50]" data-detail-heading></strong><button class="text-[12px] font-semibold text-[#c94c45]" type="button" data-remove-proposal-detail>Hapus</button></div>
         <div class="grid grid-cols-2 gap-4 max-[700px]:grid-cols-1"><label class="grid gap-[7px] text-[11px] font-bold text-[#405267]"><span>Nama Barang / Uraian</span><input class="h-[42px] rounded-[9px] border border-[#dce4ec] px-3 text-[10px]" name="details[__INDEX__][nama_barang]" required></label><label class="grid gap-[7px] text-[11px] font-bold text-[#405267]"><span>Jumlah</span><input class="h-[42px] rounded-[9px] border border-[#dce4ec] px-3 text-[10px]" type="number" min="1" name="details[__INDEX__][jumlah]" value="1" required></label></div>
         <label class="grid gap-[7px] text-[11px] font-bold text-[#405267]"><span>Spesifikasi</span><textarea class="min-h-20 rounded-[9px] border border-[#dce4ec] px-3 py-3 text-[10px]" name="details[__INDEX__][spesifikasi]" required></textarea></label>
-        <div class="grid grid-cols-2 gap-4 max-[700px]:grid-cols-1"><label class="grid gap-[7px] text-[11px] font-bold text-[#405267]"><span>Harga Satuan</span><input class="h-[42px] rounded-[9px] border border-[#dce4ec] px-3 text-[10px]" type="number" min="0" step="1" name="details[__INDEX__][estimasi_harga_satuan]" required></label><label class="grid gap-[7px] text-[11px] font-bold text-[#405267]"><span>Penanggung Jawab <em class="font-normal text-[#8290a3]">(opsional)</em></span><select class="h-[42px] rounded-[9px] border border-[#dce4ec] bg-white px-3 text-[10px]" name="details[__INDEX__][penanggung_jawab_id]"><option value="">-- Pilih Penanggung Jawab --</option>@foreach ($users as $user)<option value="{{ $user->id }}">{{ $userOptionLabel($user) }}</option>@endforeach</select></label></div>
+        <div class="grid grid-cols-2 gap-4 max-[700px]:grid-cols-1"><label class="grid gap-[7px] text-[11px] font-bold text-[#405267]"><span>Harga Satuan</span><input class="h-[42px] rounded-[9px] border border-[#dce4ec] px-3 text-[10px]" type="number" min="0" step="1" name="details[__INDEX__][estimasi_harga_satuan]" required></label><label class="grid gap-[7px] text-[11px] font-bold text-[#405267]"><span>Penanggung Jawab <em class="font-normal text-[#8290a3]">(opsional)</em></span><select class="h-[42px] rounded-[9px] border border-[#dce4ec] bg-white px-3 text-[10px]" name="details[__INDEX__][pemegang_aset_id]"><option value="">-- Pilih Penanggung Jawab --</option>@foreach ($assetHolders as $holder)<option value="{{ $holder->id }}">{{ $assetHolderOptionLabel($holder) }}</option>@endforeach</select></label></div>
         <label class="grid gap-[7px] text-[11px] font-bold text-[#405267]"><span>Link Produk / Referensi</span><input class="h-[42px] rounded-[9px] border border-[#dce4ec] px-3 text-[10px]" type="url" name="details[__INDEX__][link_produk]" placeholder="https://..."></label>
         <label class="grid gap-[7px] text-[11px] font-bold text-[#405267]"><span>Keterangan <em class="font-normal text-[#8290a3]">(opsional)</em></span><textarea class="min-h-20 rounded-[9px] border border-[#dce4ec] px-3 py-3 text-[10px]" name="details[__INDEX__][keterangan]"></textarea></label>
     </article>

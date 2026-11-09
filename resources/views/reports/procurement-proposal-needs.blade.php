@@ -56,7 +56,8 @@
                     <td class="center">{{ $detail->jumlah ?: '-' }}</td>
                     <td class="right">{{ $detail->estimasi_harga_satuan !== null ? $formatCurrency($detail->estimasi_harga_satuan) : '-' }}</td>
                     <td>@if ($isValidUrl($detail->link_produk ?? null))<a class="link" href="{{ $detail->link_produk }}">{{ $detail->link_produk }}</a>@else - @endif</td>
-                    <td>@if ($detail->keterangan)<div>{{ $detail->keterangan }}</div>@endif @if ($detail->responsiblePerson?->name)<div><strong>PJ:</strong> {{ $detail->responsiblePerson->name }}</div>@endif @if (! $detail->keterangan && ! $detail->responsiblePerson?->name)-@endif</td>
+                    @php($responsibleName = ($detail->responsibleAssetHolder ?? null)?->nama_pegawai ?: ($detail->responsiblePerson ?? null)?->name)
+                    <td>@if ($detail->keterangan)<div>{{ $detail->keterangan }}</div>@endif @if ($responsibleName)<div><strong>PJ:</strong> {{ $responsibleName }}</div>@endif @if (! $detail->keterangan && ! $responsibleName)-@endif</td>
                 </tr>
             @endforeach
             <tr>

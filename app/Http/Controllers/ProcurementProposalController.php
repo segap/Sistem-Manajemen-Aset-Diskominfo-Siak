@@ -10,6 +10,7 @@ use App\Http\Requests\StoreProcurementProposalRequest;
 use App\Http\Requests\UpdateProcurementProposalRequest;
 use App\Models\ProcurementProposal;
 use App\Models\RiwayatPersetujuan;
+use App\Models\AssetHolder;
 use App\Models\User;
 use App\Services\RiwayatPersetujuanService;
 use Dompdf\Dompdf;
@@ -62,6 +63,7 @@ class ProcurementProposalController extends Controller
         return view('usulan-pengadaan.index', [
             'proposals' => $proposals,
             'users' => $this->userOptions(),
+            'assetHolders' => $this->assetHolderOptions(),
             'statuses' => ProcurementProposalStatus::cases(),
             'spendingTypes' => $spendingTypes,
             'selectedSpendingType' => $selectedSpendingType,
@@ -142,7 +144,7 @@ class ProcurementProposalController extends Controller
             'PDF kebutuhan Sarpras hanya tersedia untuk usulan yang telah disetujui Kasubbag.',
         );
 
-        $proposal = $procurementProposal->load(['requester', 'responsiblePerson', 'details.responsiblePerson']);
+        $proposal = $procurementProposal->load(['requester', 'responsiblePerson', 'details.responsiblePerson', 'details.responsibleAssetHolder']);
         $details = $proposal->details->isNotEmpty()
             ? $proposal->details
             : collect([(object) [
@@ -425,6 +427,14 @@ class ProcurementProposalController extends Controller
             ->get(['id', 'name', 'nip']);
     }
 
+    private function assetHolderOptions()
+    {
+        return AssetHolder::query()
+            ->where('is_active', true)
+            ->orderBy('nama_pegawai')
+            ->get(['id', 'nama_pegawai', 'nip']);
+    }
+
     private function authorizeView(Request $request, ProcurementProposal $proposal): void
     {
         abort_if(
@@ -484,7 +494,7 @@ class ProcurementProposalController extends Controller
     private function relations(): array
     {
         return [
-            'requester', 'intendedUser', 'responsiblePerson', 'details.responsiblePerson',
+            'requester', 'intendedUser', 'responsiblePerson', 'details.responsiblePerson', 'details.responsibleAssetHolder',
             'assetTeamReviewer', 'supervisorReviewer', 'procurement', 'approvalHistories',
         ];
     }

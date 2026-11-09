@@ -9,7 +9,7 @@
     $canReviewAssetTeam = in_array($role, [UserRole::TimAset->value, UserRole::SuperAdmin->value], true);
     $canReviewSupervisor = in_array($role, [UserRole::KasubbagUmumPerencanaan->value, UserRole::SuperAdmin->value], true);
     $rupiah = fn ($value) => 'Rp '.number_format((float) $value, 0, ',', '.');
-    $formatDateTime = fn ($date) => $date ? $date->translatedFormat('d M Y H:i') : '-';
+    $formatDateTime = fn ($date) => $date ? $date->copy()->timezone('Asia/Jakarta')->locale('id')->translatedFormat('d M Y H:i').' WIB' : '-';
 @endphp
 
 @section('content')

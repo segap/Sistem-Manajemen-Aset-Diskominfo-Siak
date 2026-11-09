@@ -245,7 +245,7 @@ class DataExportService
 
     private function usulanPengadaan(Request $request): array
     {
-        $query = ProcurementProposal::query()->with(['requester', 'details.responsiblePerson']);
+        $query = ProcurementProposal::query()->with(['requester', 'details.responsiblePerson', 'details.responsibleAssetHolder']);
         if ($this->role($request) === UserRole::AdminBidang->value) {
             $query->where('pengusul_id', $request->user()->id);
         }

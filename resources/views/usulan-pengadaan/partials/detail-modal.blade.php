@@ -84,7 +84,7 @@
                                             -
                                         @endif
                                     </td>
-                                    <td class="align-middle">{{ $detail->responsiblePerson?->name ?: '-' }}</td>
+                                    <td class="align-middle">{{ ($detail->responsibleAssetHolder ?? null)?->nama_pegawai ?: ($detail->responsiblePerson ?? null)?->name ?: '-' }}</td>
                                 </tr>
                             @endforeach
                         </tbody>

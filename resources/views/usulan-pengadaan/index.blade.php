@@ -20,7 +20,7 @@
     $numberStart = ($proposals->currentPage() - 1) * $proposals->perPage();
     $selectedPerPage = (int) request('per_page', $proposals->perPage());
     $rupiah = fn ($value) => 'Rp '.number_format((float) $value, 0, ',', '.');
-    $formatDateTime = fn ($date) => $date ? $date->translatedFormat('d M Y H:i') : '-';
+    $formatDateTime = fn ($date) => $date ? $date->copy()->timezone('Asia/Jakarta')->locale('id')->translatedFormat('d M Y H:i').' WIB' : '-';
     $workUnitLabel = fn (?string $value) => WorkUnit::labelFor($value);
 @endphp
 
@@ -107,7 +107,7 @@
                             <td>{{ $proposal->tahun_anggaran ?: '-' }}</td>
                             <td>{{ $proposal->jenis_belanja_label }}</td>
                             <td>{{ $proposal->details->isNotEmpty() ? $proposal->details->count().' jenis' : '1 jenis' }}</td>
-                            <td>{{ $formatDateTime($proposal->created_at) }}</td>
+                            <td>{{ $formatDateTime($proposal->tanggal_pengajuan ?: $proposal->created_at) }}</td>
                             <td><span class="loan-status status-{{ $proposal->status->value }}">{{ $proposal->status->label() }}</span></td>
                             <td class="action-column">
                                 <div class="row-actions">

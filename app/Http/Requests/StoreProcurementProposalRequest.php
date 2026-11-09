@@ -27,7 +27,7 @@ class StoreProcurementProposalRequest extends FormRequest
         return [
             'tahun_anggaran' => ['required', 'integer', 'between:2000,2100'],
             'jenis_belanja' => ['required', Rule::in(array_keys(ProcurementProposal::spendingTypes()))],
-            'tanggal_pengajuan' => ['required', 'date'],
+            'tanggal_pengajuan' => ['required', 'date_format:Y-m-d\\TH:i'],
             'keterangan_umum' => ['nullable', 'string', 'max:5000'],
             'details' => ['required', 'array', 'min:1', 'max:100'],
             'details.*.nama_barang' => ['required', 'string', 'max:150'],
@@ -36,7 +36,7 @@ class StoreProcurementProposalRequest extends FormRequest
             'details.*.estimasi_harga_satuan' => ['required', 'numeric', 'min:0', 'max:9999999999999.99'],
             'details.*.link_produk' => ['nullable', 'url:http,https', 'max:2048'],
             'details.*.keterangan' => ['nullable', 'string', 'max:5000'],
-            'details.*.penanggung_jawab_id' => ['nullable', 'integer', 'exists:users,id'],
+            'details.*.pemegang_aset_id' => ['nullable', 'integer', Rule::exists('pemegang_aset', 'id')->where('is_active', true)],
         ];
     }
 
@@ -61,7 +61,8 @@ class StoreProcurementProposalRequest extends FormRequest
             'tahun_anggaran.required' => 'Tahun anggaran wajib diisi.',
             'jenis_belanja.required' => 'Jenis belanja wajib dipilih.',
             'jenis_belanja.in' => 'Jenis belanja tidak valid.',
-            'tanggal_pengajuan.required' => 'Tanggal pengajuan wajib diisi.',
+            'tanggal_pengajuan.required' => 'Tanggal dan waktu pengajuan wajib diisi.',
+            'tanggal_pengajuan.date_format' => 'Format tanggal dan waktu pengajuan tidak valid.',
             'details.required' => 'Tambahkan minimal satu barang.',
             'details.min' => 'Tambahkan minimal satu barang.',
             'details.*.nama_barang.required' => 'Nama barang wajib diisi.',

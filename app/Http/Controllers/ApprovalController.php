@@ -194,7 +194,7 @@ class ApprovalController extends Controller
             });
 
         $proposals = ProcurementProposal::query()
-            ->with(['requester', 'intendedUser', 'responsiblePerson', 'details.responsiblePerson', 'assetTeamReviewer', 'supervisorReviewer'])
+            ->with(['requester', 'intendedUser', 'responsiblePerson', 'details.responsiblePerson', 'details.responsibleAssetHolder', 'assetTeamReviewer', 'supervisorReviewer'])
             ->orderByDesc('created_at')
             ->orderByDesc('id')
             ->get()
