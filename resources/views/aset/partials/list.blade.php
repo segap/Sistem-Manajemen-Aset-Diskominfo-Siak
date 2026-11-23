@@ -38,7 +38,7 @@
             <h1 class="m-0 mb-[3px] text-[clamp(25px,2.5vw,34px)] font-extrabold tracking-[-.035em] text-[#0b2b50]">{{ $title }}</h1>
             <p class="m-0 text-[13px] text-[#66758a]">{{ $description }}</p>
         </div>
-        @if (! $verificationMode && ($canImportAssets || $canCreateAssets))
+        @if (! $verificationMode)
             <div class="flex flex-wrap justify-end gap-2 max-[580px]:w-full max-[580px]:flex-col">
                 @if ($canImportAssets)
                     <button class="page-action-button import-excel-button inline-flex min-h-[38px] items-center justify-center rounded-[9px] border-0 px-3.5 text-[10px] font-bold text-white transition" type="button" data-modal-open="import-assets">Import Excel</button>
@@ -128,6 +128,26 @@
                 </thead>
                 <tbody>
                     @forelse ($assets as $index => $asset)
+                        @if ($asset instanceof \App\Models\AssetInventorySurvey)
+                            <tr>
+                                <td class="number-column">{{ $numberStart + $index + 1 }}</td>
+                                <td>-</td>
+                                <td><strong>{{ $asset->nama_barang }}</strong>@if($asset->category)<small class="cell-subtitle">{{ $asset->category->nama_kategori }}</small>@endif<small class="cell-subtitle">Hasil pendataan inventaris</small></td>
+                                <td><strong>{{ $asset->assetHolder?->nama_pegawai ?: $asset->nama_pegawai_excel }}</strong><small class="cell-subtitle">{{ $asset->assetHolder ? \App\Enums\WorkUnit::labelFor($asset->assetHolder->unit_kerja) : ($asset->unit_kerja_excel ?: 'Unit kerja belum tercatat') }}</small></td>
+                                <td class="asset-condition-cell"><span class="asset-condition-pill bg-[#eef2f7] text-[#52657a]"><span>Tidak Ada</span></span></td>
+                                <td>-</td>
+                                <td>-</td>
+                                @if ($canSeeAssetActions)
+                                    <td class="action-column">
+                                        @if ($canCreateAssets)
+                                            <button class="page-action-button inline-flex min-h-[32px] items-center justify-center rounded-[8px] border-0 bg-[#146bb5] px-2.5 text-[9px] font-bold text-white transition hover:bg-[#0c568f]" type="button" data-modal-open="record-survey-asset-{{ $asset->id }}">Catat Aset</button>
+                                        @else
+                                            -
+                                        @endif
+                                    </td>
+                                @endif
+                            </tr>
+                        @else
                         @php
                             $status = $asset->status_verifikasi ?? 'disetujui';
                         @endphp
@@ -195,12 +215,13 @@
                                 </td>
                             @endif
                         </tr>
+                        @endif
                     @empty
                         <tr>
                             <td colspan="{{ $canSeeAssetActions ? 8 : 7 }}">
                                 <div class="table-empty">
                                     <span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 7 8-4 8 4v10l-8 4-8-4V7Zm0 0 8 4 8-4m-8 4v10" /></svg></span>
-                                    <strong>Aset tidak ditemukan</strong>
+                                    <strong>{{ ($surveyMode ?? false) ? 'Hasil pendataan tidak ditemukan' : 'Aset tidak ditemukan' }}</strong>
                                     <p>Ubah filter atau pencarian untuk melihat data lainnya.</p>
                                 </div>
                             </td>
@@ -230,7 +251,7 @@
         </div>
     </section>
 
-    @if (! $verificationMode)
+    @if (! $verificationMode && ! ($surveyMode ?? false))
         @include('aset.partials.stock-opname-master', ['items' => $stockOpnameItems ?? collect()])
     @endif
 
@@ -242,17 +263,20 @@
             @include('aset.partials.import-modal')
         @endif
         @foreach ($assets as $asset)
-            @if ($canUpdateAssets)
+            @if ($asset instanceof \App\Models\Asset && $canUpdateAssets)
                 @include('aset.partials.modals', ['asset' => $asset, 'mode' => 'edit'])
             @endif
-            @if ($canDeleteAssets)
+            @if ($asset instanceof \App\Models\Asset && $canDeleteAssets)
                 @include('aset.partials.delete-modal', ['asset' => $asset])
+            @endif
+            @if ($asset instanceof \App\Models\AssetInventorySurvey && $canCreateAssets)
+                @include('aset.partials.record-survey-modal', ['survey' => $asset])
             @endif
         @endforeach
     @endif
 
     @foreach ($assets as $asset)
-        @if (($asset->status_verifikasi ?? 'disetujui') === 'disetujui' && $canUpdateAssetCondition)
+        @if ($asset instanceof \App\Models\Asset && ($asset->status_verifikasi ?? 'disetujui') === 'disetujui' && $canUpdateAssetCondition)
             @include('aset.partials.condition-modal', ['asset' => $asset])
         @endif
     @endforeach

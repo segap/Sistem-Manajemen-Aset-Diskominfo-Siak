@@ -3,6 +3,7 @@
 use App\Http\Controllers\ApprovalController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\DashboardPdfController;
 use App\Http\Controllers\DataExportController;
 use App\Http\Controllers\AssetDisposalRequestController;
 use App\Http\Controllers\AssetHolderController;
@@ -110,6 +111,11 @@ Route::middleware(['auth'])->group(function () {
 Route::get('/dashboard', DashboardController::class)
     ->middleware(['auth', 'permission:dashboard.view'])
     ->name('dashboard');
+
+Route::get('/dashboard/export/{section}', [DashboardPdfController::class, 'download'])
+    ->middleware(['auth', 'permission:dashboard.view'])
+    ->whereIn('section', ['keseluruhan', 'rekonsiliasi', 'monitoring-laporan', 'monitoring-persediaan', 'persediaan', 'kategori-aset', 'barang-kondisi', 'kir', 'aktivitas-aset', 'kondisi-aset'])
+    ->name('dashboard.pdf');
 
 Route::get('/stock-opname', [StockOpnameController::class, 'index'])
     ->middleware(['auth', 'permission:stock_opname.view'])
@@ -223,6 +229,11 @@ Route::middleware(['auth'])->group(function () {
 
 Route::middleware(['auth', 'permission:aset.view'])->group(function () {
     Route::get('/aset', [AssetController::class, 'index'])->name('web.aset.index');
+    Route::get('/aset/hasil-pendataan', [AssetController::class, 'inventorySurveyIndex'])->name('web.aset.inventory-surveys');
+    Route::post('/aset/hasil-pendataan/{inventorySurvey}/catat-aset', [AssetController::class, 'recordInventorySurveyAsset'])
+        ->middleware('permission:aset.create')
+        ->name('web.aset.inventory-surveys.record-asset')
+        ->whereNumber('inventorySurvey');
     Route::get('/aset/{asset}', [AssetController::class, 'show'])->name('web.aset.show')->whereNumber('asset');
     Route::get('/aset/{asset}/qr.svg', [AssetQrController::class, 'svg'])->name('web.aset.qr.svg')->whereNumber('asset');
     Route::patch('/aset/{asset}/kondisi', [AssetController::class, 'updateCondition'])

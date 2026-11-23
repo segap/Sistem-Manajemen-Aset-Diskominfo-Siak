@@ -47,14 +47,23 @@ class AssetDisposalRequestController extends Controller
             ->withQueryString();
 
         $eligibleAssets = Asset::query()
-            ->with(['category', 'conditionStocks'])
+            ->with(['category', 'conditionStocks', 'assetHolder'])
             ->whereNull('tanggal_penghapusan')
             ->where('status_verifikasi', 'disetujui')
             ->where('jumlah', 1)
-            ->where('kondisi', AssetCondition::HeavyDamage->value)
-            ->whereHas('conditionMutations', fn (Builder $query) => $query
-                ->where('ke_kondisi', AssetCondition::HeavyDamage->value)
-                ->whereHas('documents', fn (Builder $documentQuery) => $documentQuery->where('jenis', 'foto')))
+            // Master Barang memakai stok kondisi sebagai sumber kondisi per unit.
+            // Jangan menyaring berdasarkan aset.kondisi yang dapat tertinggal pada
+            // data legacy/import ketika stok kondisi sudah menunjukkan Rusak Berat.
+            ->whereHas('conditionStocks', fn (Builder $query) => $query
+                ->where('kondisi', AssetCondition::HeavyDamage->value)
+                ->where('jumlah', 1))
+            ->where(function (Builder $query): void {
+                $query->whereDoesntHave('conditionMutations', fn (Builder $mutationQuery) => $mutationQuery
+                    ->where('ke_kondisi', AssetCondition::HeavyDamage->value))
+                    ->orWhereHas('conditionMutations', fn (Builder $mutationQuery) => $mutationQuery
+                        ->where('ke_kondisi', AssetCondition::HeavyDamage->value)
+                        ->whereHas('documents', fn (Builder $documentQuery) => $documentQuery->where('jenis', 'foto')));
+            })
             ->whereDoesntHave('disposalRequests', fn (Builder $query) => $query->where('status', AssetDisposalStatus::Submitted->value))
             ->whereDoesntHave('loanDetails.loanRequest', fn (Builder $query) => $query->whereIn('status', $this->blockingLoanStatuses()))
             ->whereDoesntHave('loanRequests', fn (Builder $query) => $query->whereIn('status', $this->blockingLoanStatuses()))
@@ -100,7 +109,7 @@ class AssetDisposalRequestController extends Controller
                 $lockedAsset = Asset::query()->lockForUpdate()->findOrFail($asset->id);
                 $lockedMutation = $this->eligibleHeavyDamageMutation($lockedAsset);
 
-                if ($lockedMutation->id !== $mutation->id) {
+                if ($lockedMutation?->id !== $mutation?->id) {
                     throw ValidationException::withMessages([
                         'aset_id' => 'Bukti perubahan kondisi aset berubah. Silakan pilih ulang aset.',
                     ]);
@@ -120,12 +129,12 @@ class AssetDisposalRequestController extends Controller
 
                 $disposal = AssetDisposalRequest::query()->create([
                     'aset_id' => $lockedAsset->id,
-                    'asset_condition_mutation_id' => $lockedMutation->id,
+                    'asset_condition_mutation_id' => $lockedMutation?->id,
                     'pengusul_id' => $request->user()->id,
                     'alasan' => \App\Enums\AssetDisposalReason::HeavilyDamaged,
                     'catatan' => $request->validated('catatan'),
-                    'catatan_kondisi_snapshot' => $lockedMutation->catatan,
-                    'google_drive_url_snapshot' => $lockedMutation->google_drive_url,
+                    'catatan_kondisi_snapshot' => $lockedMutation?->catatan ?: $lockedAsset->catatan_kondisi,
+                    'google_drive_url_snapshot' => $lockedMutation?->google_drive_url ?: $lockedAsset->google_drive_url,
                     'path_dokumen' => $supportPath,
                     'nama_dokumen' => $document?->getClientOriginalName(),
                     'mime_dokumen' => $document?->getClientMimeType(),
@@ -174,13 +183,13 @@ class AssetDisposalRequestController extends Controller
                 'kondisi' => 'Rusak Berat (RB)',
             ],
             'mutation' => [
-                'id' => $mutation->id,
-                'catatan' => $mutation->catatan ?: '',
-                'tanggal' => $mutation->created_at?->translatedFormat('d M Y H:i') ?: '-',
-                'petugas' => $mutation->user?->name ?: '-',
-                'google_drive_url' => $mutation->google_drive_url,
+                'id' => $mutation?->id,
+                'catatan' => $mutation?->catatan ?: $asset->catatan_kondisi ?: '',
+                'tanggal' => $mutation?->created_at?->translatedFormat('d M Y H:i') ?: '-',
+                'petugas' => $mutation?->user?->name ?: 'Data awal aset',
+                'google_drive_url' => $mutation?->google_drive_url ?: $asset->google_drive_url,
             ],
-            'documents' => $mutation->documents->map(fn ($document): array => [
+            'documents' => ($mutation?->documents ?? collect())->map(fn ($document): array => [
                 'id' => $document->id,
                 'jenis' => $document->jenis,
                 'nama_file' => $document->nama_file_asli ?: basename((string) $document->path_file),
@@ -324,7 +333,7 @@ class AssetDisposalRequestController extends Controller
         );
     }
 
-    private function eligibleHeavyDamageMutation(Asset $asset): AssetConditionMutation
+    private function eligibleHeavyDamageMutation(Asset $asset): ?AssetConditionMutation
     {
         if ($asset->tanggal_penghapusan) {
             throw ValidationException::withMessages(['aset_id' => 'Aset ini sudah dihapus.']);
@@ -338,15 +347,11 @@ class AssetDisposalRequestController extends Controller
             throw ValidationException::withMessages(['aset_id' => 'Aset belum disetujui oleh Tim Aset.']);
         }
 
-        if ($asset->kondisi !== AssetCondition::HeavyDamage) {
-            throw ValidationException::withMessages(['aset_id' => 'Penghapusan hanya dapat diajukan untuk aset dengan kondisi Rusak Berat.']);
-        }
-
         $asset->loadMissing('conditionStocks');
         $hasHeavyDamageStock = (int) ($asset->condition_stock_summary[AssetCondition::HeavyDamage->value] ?? 0) === 1;
 
         if (! $hasHeavyDamageStock) {
-            throw ValidationException::withMessages(['aset_id' => 'Stok kondisi aset belum sinkron sebagai Rusak Berat. Perbaiki data kondisi terlebih dahulu.']);
+            throw ValidationException::withMessages(['aset_id' => 'Penghapusan hanya dapat diajukan untuk aset dengan stok kondisi Rusak Berat.']);
         }
 
         $this->ensureAssetHasNoBlockingProcess($asset);
@@ -358,8 +363,12 @@ class AssetDisposalRequestController extends Controller
             ->latest('id')
             ->first();
 
+        // Aset dari import/legacy dapat dicatat sudah Rusak Berat sejak awal.
+        // Data tersebut memiliki stok kondisi dan catatan aset, tetapi tidak memiliki
+        // mutasi perubahan kondisi. Kolom relasi mutasi pada pengajuan memang nullable,
+        // sehingga data awal itu tetap dapat diajukan tanpa membuat riwayat palsu.
         if (! $mutation) {
-            throw ValidationException::withMessages(['aset_id' => 'Riwayat perubahan kondisi Rusak Berat belum tersedia.']);
+            return null;
         }
 
         $laterDifferentMutationExists = $asset->conditionMutations()
@@ -438,8 +447,12 @@ class AssetDisposalRequestController extends Controller
      * @param  list<string>  $storedPaths
      * @return list<array<string, mixed>>
      */
-    private function copyConditionEvidence(AssetConditionMutation $mutation, array &$storedPaths): array
+    private function copyConditionEvidence(?AssetConditionMutation $mutation, array &$storedPaths): array
     {
+        if (! $mutation) {
+            return [];
+        }
+
         $payloads = [];
         $batch = (string) Str::uuid();
 

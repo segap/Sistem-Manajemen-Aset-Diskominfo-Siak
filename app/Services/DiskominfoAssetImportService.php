@@ -7,6 +7,7 @@ use App\Models\Asset;
 use App\Models\AssetCategory;
 use App\Models\AssetHolder;
 use App\Models\AssetImportBatch;
+use App\Models\AssetInventorySurvey;
 use App\Models\User;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
@@ -68,7 +69,7 @@ class DiskominfoAssetImportService
             throw ValidationException::withMessages(['file' => 'Tidak ada data inventaris yang ditemukan pada worksheet yang didukung.']);
         }
 
-        $summary = ['total' => count($rows), 'valid' => 0, 'corrected' => 0, 'warning' => 0, 'error' => 0, 'skipped' => 0, 'units' => 0];
+        $summary = ['total' => count($rows), 'valid' => 0, 'corrected' => 0, 'warning' => 0, 'error' => 0, 'survey' => 0, 'units' => 0];
         foreach ($rows as $row) {
             $summary[$row['status']]++;
             if (in_array($row['status'], ['valid', 'corrected', 'warning'], true)) {
@@ -82,8 +83,8 @@ class DiskominfoAssetImportService
         return ['rows' => $rows, 'summary' => $summary, 'warnings' => $warnings, 'hash' => hash_file('sha256', $path)];
     }
 
-    /** @param array<string, int|string> $categoryMappings @param array<string, int|string> $holderOverrides @param array<string, string> $conditionOverrides */
-    public function confirm(string $path, string $filename, User $user, array $categoryMappings, array $holderOverrides, array $conditionOverrides, AssetConditionStockService $stockService, KodeInternalService $codeService): int
+    /** @param array<string, int|string> $categoryMappings @param array<string, int|string> $holderOverrides @param array<string, string> $conditionOverrides @return array{assets: int, surveys: int} */
+    public function confirm(string $path, string $filename, User $user, array $categoryMappings, array $holderOverrides, array $conditionOverrides, AssetConditionStockService $stockService, KodeInternalService $codeService): array
     {
         $preview = $this->preview($path, $conditionOverrides, $holderOverrides);
         $hash = $preview['hash'];
@@ -103,37 +104,57 @@ class DiskominfoAssetImportService
         $total = 0;
 
         foreach ($rows as &$row) {
-            if ($row['status'] === 'skipped') {
-                continue;
-            }
             $categoryId = $categoryMappings[$row['sheet']] ?? null;
             if (! $categoryId || ! in_array((int) $categoryId, $categories, true)) {
                 throw ValidationException::withMessages(['kategori' => "Kategori untuk sheet {$row['sheet']} wajib dipilih dari master kategori."]);
             }
             $holderId = $holderOverrides[$row['key']] ?? $row['pemegang_aset_id'];
-            if (! $holderId || ! in_array((int) $holderId, $holders, true)) {
+            if ($row['jumlah'] > 0 && (! $holderId || ! in_array((int) $holderId, $holders, true))) {
                 throw ValidationException::withMessages(['pegawai' => "Pegawai sheet {$row['sheet']} baris {$row['row']} belum dipetakan secara valid."]);
             }
             $row['kategori_aset_id'] = (int) $categoryId;
-            $row['pemegang_aset_id'] = (int) $holderId;
+            $row['pemegang_aset_id'] = $holderId && in_array((int) $holderId, $holders, true) ? (int) $holderId : null;
             $total += $row['jumlah'];
         }
         unset($row);
 
         try {
-            return DB::transaction(function () use ($hash, $filename, $user, $rows, $total, $stockService, $codeService): int {
+            return DB::transaction(function () use ($hash, $filename, $user, $rows, $total, $stockService, $codeService): array {
                 $batch = AssetImportBatch::query()->where('file_hash', $hash)->lockForUpdate()->first();
-            if ($batch?->status === 'completed') {
-                throw ValidationException::withMessages(['file' => 'Workbook identik sudah berhasil diimport sebelumnya.']);
+            $surveyBackfillOnly = $batch?->status === 'completed';
+            if ($surveyBackfillOnly && $batch->inventorySurveys()->exists()) {
+                throw ValidationException::withMessages(['file' => 'Workbook identik sudah memiliki aset fisik dan hasil pendataan.']);
             }
             if ($batch?->status === 'processing') {
                 throw ValidationException::withMessages(['file' => 'Import workbook ini sedang diproses.']);
             }
             $batch ??= new AssetImportBatch(['file_hash' => $hash]);
-            $batch->fill(['source_filename' => $filename, 'user_id' => $user->id, 'status' => 'processing', 'asset_unit_count' => $total, 'imported_at' => null])->save();
+            if (! $surveyBackfillOnly) {
+                $batch->fill(['source_filename' => $filename, 'user_id' => $user->id, 'status' => 'processing', 'asset_unit_count' => $total, 'imported_at' => null])->save();
+            }
+
+            $surveyTotal = 0;
 
             foreach ($rows as $row) {
-                if ($row['status'] === 'skipped') {
+                if ($row['jumlah'] === 0) {
+                    AssetInventorySurvey::query()->create([
+                        'asset_import_batch_id' => $batch->id,
+                        'pemegang_aset_id' => $row['pemegang_aset_id'],
+                        'kategori_aset_id' => $row['kategori_aset_id'],
+                        'nama_pegawai_excel' => $row['nama_pegawai'],
+                        'unit_kerja_excel' => $row['unit_kerja'] ?: null,
+                        'nama_barang' => $row['asset_name'],
+                        'jumlah' => 0,
+                        'jumlah_excel' => $row['jumlah_excel'],
+                        'kondisi_excel' => $row['kondisi_excel'] ?: null,
+                        'catatan_kerusakan' => $row['catatan'] ?: null,
+                        'nama_sheet' => $row['sheet'],
+                        'baris_excel' => $row['row'],
+                    ]);
+                    $surveyTotal++;
+                    continue;
+                }
+                if ($surveyBackfillOnly) {
                     continue;
                 }
                 for ($unit = 1; $unit <= $row['jumlah']; $unit++) {
@@ -158,8 +179,10 @@ class DiskominfoAssetImportService
                     $codeService->generate($asset);
                 }
             }
-                $batch->update(['status' => 'completed', 'imported_at' => now()]);
-                return $total;
+                if (! $surveyBackfillOnly) {
+                    $batch->update(['status' => 'completed', 'imported_at' => now()]);
+                }
+                return ['assets' => $total, 'surveys' => $surveyTotal];
             });
         } catch (QueryException $exception) {
             if (str_contains(strtolower($exception->getMessage()), 'duplicate')) {
@@ -190,14 +213,18 @@ class DiskominfoAssetImportService
         $status = 'valid';
         $hasQuantityError = false;
         $hasInconsistentNoAsset = false;
-        if ($quantity === 0) $status = 'skipped';
+        $isSurvey = $quantity === 0;
+        if ($isSurvey) {
+            $status = 'survey';
+            $messages[] = 'Pendataan - Tidak Ada Barang; tidak akan dibuat sebagai aset fisik.';
+        }
         if ($quantity === null) { $status = 'error'; $hasQuantityError = true; $messages[] = 'Jumlah kosong atau tidak dikenali.'; }
-        $requiresConditionCorrection = $condition === null && $status !== 'skipped';
+        $requiresConditionCorrection = $condition === null && ! $isSurvey;
         if ($requiresConditionCorrection) { $status = 'error'; $messages[] = 'Kondisi tidak dikenali; pilih koreksi pada preview.'; }
         if ($quantity && $this->normalize($data['D'] ?? '') === 'tidak ada') { $status = 'error'; $hasInconsistentNoAsset = true; $messages[] = 'Jumlah positif tidak boleh memiliki kondisi Tidak ada.'; }
         $holderId = null;
         $requiresHolderMapping = false;
-        if ($status !== 'skipped') {
+        if ($quantity !== null) {
             $comparisonName = $this->comparisonName($name);
             $candidates = $holders['by_name'][$comparisonName] ?? [];
             $excelUnit = $this->normalizeWorkUnit($unit);
@@ -214,7 +241,7 @@ class DiskominfoAssetImportService
                     $status = 'corrected';
                     $messages[] = 'Pegawai dipilih secara manual; pilihan akan divalidasi ulang saat konfirmasi.';
                 }
-            } else {
+            } elseif (! $isSurvey) {
                 $status = 'error';
                 $requiresHolderMapping = true;
                 $messages[] = $candidates === []
@@ -222,17 +249,22 @@ class DiskominfoAssetImportService
                     : ($holderMatch['ambiguous']
                         ? 'Pegawai ambigu; pilih secara manual.'
                         : 'Nama pegawai ditemukan, tetapi Unit Kerja tidak setara. Pilih pegawai secara manual.');
+            } elseif ($candidates === []) {
+                $messages[] = 'Pegawai belum ditemukan; hasil pendataan tetap disimpan tanpa relasi pegawai.';
+            } else {
+                $messages[] = 'Identitas pegawai ambigu atau unit kerja berbeda; hasil pendataan tetap disimpan tanpa relasi pegawai.';
             }
         }
         if ($status === 'valid' && $condition === 'baik' && $note !== '' && $note !== '-') { $status = 'warning'; $messages[] = 'Kondisi Baik memiliki catatan; periksa sebelum konfirmasi.'; }
         $blockingError = $status === 'error' && ($hasQuantityError || $hasInconsistentNoAsset);
-        return ['key' => $key, 'sheet' => $sheet, 'row' => $row, 'asset_name' => $sheet, 'nama_pegawai' => $name, 'unit_kerja' => $unit, 'jumlah' => $quantity ?? 0, 'kondisi' => $condition, 'catatan' => $note, 'pemegang_aset_id' => $holderId, 'status' => $status, 'messages' => $messages, 'requires_condition_correction' => $requiresConditionCorrection, 'requires_holder_mapping' => $requiresHolderMapping, 'manual_holder_id' => $status === 'corrected' ? $holderId : null, 'suggestions' => $requiresHolderMapping ? $this->suggestHolderCandidates($comparisonName, $holders['all']) : [], 'blocking_error' => $blockingError];
+        return ['key' => $key, 'sheet' => $sheet, 'row' => $row, 'asset_name' => $sheet, 'nama_pegawai' => $name, 'unit_kerja' => $unit, 'jumlah' => $quantity ?? 0, 'jumlah_excel' => trim((string) ($data['C'] ?? '')), 'kondisi' => $condition, 'kondisi_excel' => trim((string) ($data['D'] ?? '')), 'catatan' => $note, 'pemegang_aset_id' => $holderId, 'status' => $status, 'messages' => $messages, 'requires_condition_correction' => $requiresConditionCorrection, 'requires_holder_mapping' => $requiresHolderMapping, 'manual_holder_id' => $status === 'corrected' ? $holderId : null, 'suggestions' => $requiresHolderMapping ? $this->suggestHolderCandidates($comparisonName, $holders['all']) : [], 'blocking_error' => $blockingError];
     }
 
     private function quantity(mixed $value): ?int
     {
         $rawValue = mb_strtolower(trim((string) $value));
         if ($this->normalize($rawValue) === 'tidak ada') return 0;
+        if ($rawValue === '0') return 0;
         if (preg_match('/^([1-9][0-9]*)(?:\s*\([^)]*\))?$/u', $rawValue, $match)) return (int) $match[1];
         return null;
     }

@@ -10,6 +10,12 @@
     $reportMonitoringYears = $dashboard['report_monitoring_years'] ?? [];
     $stockCategories = $dashboard['stock_opname_categories'] ?? [];
     $assetCategories = $dashboard['asset_categories'] ?? [];
+    $assetItemsByCondition = $dashboard['asset_items_by_condition'] ?? [];
+    $assetItemCategories = collect($assetItemsByCondition)
+        ->map(fn (array $item): array => ['id' => $item['category_id'], 'name' => $item['category_name']])
+        ->unique('id')
+        ->sortBy('name', SORT_NATURAL | SORT_FLAG_CASE)
+        ->values();
     $kirSummary = $dashboard['kir_summary'] ?? [
         'total_ruangan' => 0,
         'total_penanggung_jawab' => 0,
@@ -100,6 +106,11 @@
             <h1 class="m-0 text-[28px] font-extrabold tracking-[-.03em] text-[#0b2b50] max-[580px]:text-[24px]">Dashboard</h1>
             <p class="m-0 mt-1.5 text-[13px] text-[#66758a]">Ringkasan informasi aset, persediaan, dan kelengkapan laporan.</p>
         </div>
+        <div class="flex flex-wrap items-end justify-end gap-3 max-[580px]:w-full">
+        <a class="page-action-button inline-flex min-h-[38px] items-center justify-center gap-1.5 rounded-[9px] border-0 bg-[#146bb5] px-3.5 text-[10px] font-bold text-white no-underline shadow-[0_8px_18px_rgb(20_107_181_/_16%)] transition hover:bg-[#0c568f]" href="{{ route('dashboard.pdf', ['section' => 'keseluruhan', 'tahun' => request('tahun'), 'activity_month' => $selectedActivityMonth]) }}">
+            <svg class="h-3.5 w-3.5 fill-none stroke-current stroke-[2] [stroke-linecap:round] [stroke-linejoin:round]" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14" /></svg>
+            Download PDF
+        </a>
         <form method="GET" action="{{ route('dashboard') }}" class="shrink-0">
             <label class="grid gap-1.5 text-[10px] font-bold text-[#60708a]">
                 <span>Filter Tahun</span>
@@ -111,12 +122,14 @@
                 </select>
             </label>
         </form>
+        </div>
     </header>
 
     @forelse ($reportMonitoringYears as $monitoringYear)
         @php
             $reconciliation = $monitoringYear['reconciliation'];
             $assetReportMonitoring = $monitoringYear['asset_reports'];
+            $inventoryReportMonitoring = $monitoringYear['inventory_reports'];
         @endphp
     <section class="mb-8" aria-labelledby="reconciliation-dashboard-title-{{ $reconciliation['year'] }}">
         <div class="mb-3 flex items-end justify-between gap-4 max-[580px]:items-start max-[580px]:flex-col">
@@ -129,12 +142,18 @@
                     <p class="m-0 mt-1 text-[12px] text-[#66758a]">Monitoring kelengkapan dokumen rekonsiliasi tahun {{ $reconciliation['year'] }}.</p>
                 </div>
             </div>
-            @if (auth()->user()?->role !== 'pimpinan')
-            <a class="page-action-button inline-flex min-h-[38px] items-center justify-center gap-1.5 rounded-[9px] border-0 bg-[#146bb5] px-3.5 text-[10px] font-bold text-white no-underline shadow-[0_8px_18px_rgb(20_107_181_/_16%)] transition hover:bg-[#0c568f]" href="{{ route('laporan-dokumen.index', ['jenis' => 'rekonsiliasi-bulanan', 'tahun' => $reconciliation['year']]) }}">
-                Lihat Rekonsiliasi Bulanan
-                <svg class="h-3.5 w-3.5 fill-none stroke-current stroke-[2] [stroke-linecap:round] [stroke-linejoin:round]" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6" /></svg>
-            </a>
-            @endif
+            <div class="flex flex-wrap items-center gap-2">
+                <a class="page-action-button inline-flex min-h-[34px] items-center justify-center gap-1.5 rounded-[8px] border border-[#dbe3eb] bg-white px-3 text-[9px] font-bold text-[#146bb5] no-underline transition hover:border-[#9fc5df] hover:bg-[#f8fafc]" href="{{ route('dashboard.pdf', ['section' => 'rekonsiliasi', 'tahun' => $reconciliation['year']]) }}">
+                    <svg class="h-3.5 w-3.5 fill-none stroke-current stroke-[2] [stroke-linecap:round] [stroke-linejoin:round]" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14" /></svg>
+                    PDF
+                </a>
+                @if (auth()->user()?->role !== 'pimpinan')
+                <a class="page-action-button inline-flex min-h-[38px] items-center justify-center gap-1.5 rounded-[9px] border-0 bg-[#146bb5] px-3.5 text-[10px] font-bold text-white no-underline shadow-[0_8px_18px_rgb(20_107_181_/_16%)] transition hover:bg-[#0c568f]" href="{{ route('laporan-dokumen.index', ['jenis' => 'rekonsiliasi-bulanan', 'tahun' => $reconciliation['year']]) }}">
+                    Lihat Rekonsiliasi Bulanan
+                    <svg class="h-3.5 w-3.5 fill-none stroke-current stroke-[2] [stroke-linecap:round] [stroke-linejoin:round]" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6" /></svg>
+                </a>
+                @endif
+            </div>
         </div>
 
         <article class="rounded-[14px] border border-[#e3e9f0] bg-white p-[22px] shadow-[0_8px_22px_rgb(35_63_92_/_4%)]">
@@ -182,9 +201,15 @@
     </section>
 
     <section class="mb-8" aria-labelledby="asset-report-monitoring-title-{{ $monitoringYear['year'] }}">
-        <div class="mb-3">
-            <h2 class="m-0 text-[18px] font-extrabold text-[#0b2b50]" id="asset-report-monitoring-title-{{ $monitoringYear['year'] }}">Monitoring Kelengkapan Laporan Aset</h2>
-            <p class="m-0 mt-1 text-[12px] text-[#66758a]">Status kelengkapan dokumen laporan aset tahun {{ $monitoringYear['year'] }}.</p>
+        <div class="mb-3 flex flex-wrap items-start justify-between gap-3">
+            <div>
+                <h2 class="m-0 text-[18px] font-extrabold text-[#0b2b50]" id="asset-report-monitoring-title-{{ $monitoringYear['year'] }}">Monitoring Kelengkapan Laporan Aset</h2>
+                <p class="m-0 mt-1 text-[12px] text-[#66758a]">Status kelengkapan dokumen laporan aset tahun {{ $monitoringYear['year'] }}.</p>
+            </div>
+            <a class="page-action-button inline-flex min-h-[34px] items-center justify-center gap-1.5 rounded-[8px] border border-[#dbe3eb] bg-white px-3 text-[9px] font-bold text-[#146bb5] no-underline transition hover:border-[#9fc5df] hover:bg-[#f8fafc]" href="{{ route('dashboard.pdf', ['section' => 'monitoring-laporan', 'tahun' => $monitoringYear['year']]) }}">
+                <svg class="h-3.5 w-3.5 fill-none stroke-current stroke-[2] [stroke-linecap:round] [stroke-linejoin:round]" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14" /></svg>
+                PDF
+            </a>
         </div>
         <article class="overflow-hidden rounded-[14px] border border-[#e3e9f0] bg-white shadow-[0_8px_22px_rgb(35_63_92_/_4%)]">
             <div class="overflow-x-auto">
@@ -199,8 +224,8 @@
                     <tbody>
                         <tr>
                             @foreach ($assetReportMonitoring as $report)
-                                <td class="border-b border-r border-[#edf1f5] px-4 py-3 last:border-r-0 {{ $report['uploaded_at'] ? 'bg-[#eaf8f0]' : 'bg-[#f8fafc]' }}">
-                                    @if ($report['uploaded_at'])
+                                <td class="border-b border-r border-[#edf1f5] px-4 py-3 last:border-r-0 {{ ($report['is_complete'] ?? false) ? 'bg-[#eaf8f0]' : 'bg-[#f8fafc]' }}">
+                                    @if ($report['is_complete'] ?? false)
                                         <span class="inline-flex text-[#16a34a]" title="Dokumen sudah diunggah">
                                             <svg class="h-5 w-5 fill-none stroke-current stroke-[2.2] [stroke-linecap:round] [stroke-linejoin:round]" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="m8 12 2.5 2.5L16 9" /></svg>
                                         </span>
@@ -216,6 +241,23 @@
                             @endforeach
                         </tr>
                     </tbody>
+                </table>
+            </div>
+        </article>
+    </section>
+    <section class="mb-8" aria-labelledby="inventory-report-monitoring-title-{{ $monitoringYear['year'] }}">
+        <div class="mb-3 flex flex-wrap items-start justify-between gap-3">
+            <div>
+                <h2 class="m-0 text-[18px] font-extrabold text-[#0b2b50]" id="inventory-report-monitoring-title-{{ $monitoringYear['year'] }}">Monitoring Kelengkapan Laporan Persediaan</h2>
+                <p class="m-0 mt-1 text-[12px] text-[#66758a]">Status kelengkapan dokumen laporan persediaan tahun {{ $monitoringYear['year'] }}.</p>
+            </div>
+            <a class="page-action-button inline-flex min-h-[34px] items-center justify-center gap-1.5 rounded-[8px] border border-[#dbe3eb] bg-white px-3 text-[9px] font-bold text-[#146bb5] no-underline transition hover:border-[#9fc5df] hover:bg-[#f8fafc]" href="{{ route('dashboard.pdf', ['section' => 'monitoring-persediaan', 'tahun' => $monitoringYear['year']]) }}">PDF</a>
+        </div>
+        <article class="overflow-hidden rounded-[14px] border border-[#e3e9f0] bg-white shadow-[0_8px_22px_rgb(35_63_92_/_4%)]">
+            <div class="overflow-x-auto">
+                <table class="w-full min-w-[860px] table-fixed border-collapse text-center">
+                    <thead><tr class="bg-[#f8fafc]">@foreach ($inventoryReportMonitoring['reports'] as $report)<th class="border-b border-r border-[#e3e9f0] px-4 py-4 text-[11px] font-extrabold text-[#0b2b50] last:border-r-0">{{ $report['label'] }}</th>@endforeach</tr></thead>
+                    <tbody><tr>@foreach ($inventoryReportMonitoring['reports'] as $report)<td class="border-b border-r border-[#edf1f5] px-4 py-3 last:border-r-0 {{ $report['is_complete'] ? 'bg-[#eaf8f0]' : 'bg-[#f8fafc]' }}">@if ($report['is_complete'])<span class="inline-flex text-[#16a34a]"><svg class="h-5 w-5 fill-none stroke-current stroke-[2.2] [stroke-linecap:round] [stroke-linejoin:round]" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" /><path d="m8 12 2.5 2.5L16 9" /></svg></span>@else<span class="text-[18px] font-semibold text-[#a8b3c1]">-</span>@endif</td>@endforeach</tr><tr>@foreach ($inventoryReportMonitoring['reports'] as $report)<td class="border-r border-[#edf1f5] px-4 py-3 text-[10px] font-medium text-[#718095] last:border-r-0">{{ $report['detail'] ?? $report['uploaded_at'] ?: '-' }}</td>@endforeach</tr></tbody>
                 </table>
             </div>
         </article>
@@ -249,9 +291,15 @@
     </section>
 
     <section class="mt-8" aria-labelledby="stock-category-dashboard-title">
-        <div class="mb-3">
-            <h2 class="m-0 text-[18px] font-extrabold text-[#0b2b50]" id="stock-category-dashboard-title">Barang Persediaan Per Kategori</h2>
-            <p class="m-0 mt-1 text-[12px] text-[#66758a]">Ringkasan stok barang persediaan berdasarkan kategori.</p>
+        <div class="mb-3 flex flex-wrap items-start justify-between gap-3">
+            <div>
+                <h2 class="m-0 text-[18px] font-extrabold text-[#0b2b50]" id="stock-category-dashboard-title">Barang Persediaan Per Kategori</h2>
+                <p class="m-0 mt-1 text-[12px] text-[#66758a]">Ringkasan stok barang persediaan berdasarkan kategori.</p>
+            </div>
+            <a class="page-action-button inline-flex min-h-[34px] items-center justify-center gap-1.5 rounded-[8px] border border-[#dbe3eb] bg-white px-3 text-[9px] font-bold text-[#146bb5] no-underline transition hover:border-[#9fc5df] hover:bg-[#f8fafc]" href="{{ route('dashboard.pdf', ['section' => 'persediaan']) }}">
+                <svg class="h-3.5 w-3.5 fill-none stroke-current stroke-[2] [stroke-linecap:round] [stroke-linejoin:round]" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14" /></svg>
+                PDF
+            </a>
         </div>
 
         @if ($stockCategories === [])
@@ -348,9 +396,15 @@
         </div>
 
         <article class="mt-5 rounded-[14px] border border-[#e3e9f0] bg-white p-[22px] shadow-[0_8px_22px_rgb(35_63_92_/_4%)]" aria-labelledby="kir-dashboard-title">
-            <header>
-                <h3 class="m-0 text-[15px] font-extrabold text-[#20364f]" id="kir-dashboard-title">Kartu Inventaris Ruangan (KIR)</h3>
-                <p class="m-0 mt-1 text-[10px] text-[#94a0af]">Ringkasan inventaris barang berdasarkan ruangan.</p>
+            <header class="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                    <h3 class="m-0 text-[15px] font-extrabold text-[#20364f]" id="kir-dashboard-title">Kartu Inventaris Ruangan (KIR)</h3>
+                    <p class="m-0 mt-1 text-[10px] text-[#94a0af]">Ringkasan inventaris barang berdasarkan ruangan.</p>
+                </div>
+                <a class="page-action-button inline-flex min-h-[34px] items-center justify-center gap-1.5 rounded-[8px] border border-[#dbe3eb] bg-white px-3 text-[9px] font-bold text-[#146bb5] no-underline transition hover:border-[#9fc5df] hover:bg-[#f8fafc]" href="{{ route('dashboard.pdf', ['section' => 'kir']) }}">
+                    <svg class="h-3.5 w-3.5 fill-none stroke-current stroke-[2] [stroke-linecap:round] [stroke-linejoin:round]" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14" /></svg>
+                    PDF
+                </a>
             </header>
 
             <div class="mt-5 grid grid-cols-3 gap-4 max-[820px]:grid-cols-1">
@@ -427,9 +481,15 @@
         </article>
 
         <article class="mt-5 rounded-[14px] border border-[#e3e9f0] bg-white p-[22px] shadow-[0_8px_22px_rgb(35_63_92_/_4%)]" aria-labelledby="asset-category-dashboard-title">
-            <header>
-                <h3 class="m-0 text-[15px] font-extrabold text-[#20364f]" id="asset-category-dashboard-title">Daftar Kategori Aset</h3>
-                <p class="m-0 mt-1 text-[10px] text-[#94a0af]">Ringkasan jumlah dan kondisi aset berdasarkan kategori.</p>
+            <header class="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                    <h3 class="m-0 text-[15px] font-extrabold text-[#20364f]" id="asset-category-dashboard-title">Daftar Kategori Aset</h3>
+                    <p class="m-0 mt-1 text-[10px] text-[#94a0af]">Ringkasan jumlah dan kondisi aset berdasarkan kategori.</p>
+                </div>
+                <a class="page-action-button inline-flex min-h-[34px] items-center justify-center gap-1.5 rounded-[8px] border border-[#dbe3eb] bg-white px-3 text-[9px] font-bold text-[#146bb5] no-underline transition hover:border-[#9fc5df] hover:bg-[#f8fafc]" href="{{ route('dashboard.pdf', ['section' => 'kategori-aset']) }}">
+                    <svg class="h-3.5 w-3.5 fill-none stroke-current stroke-[2] [stroke-linecap:round] [stroke-linejoin:round]" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14" /></svg>
+                    PDF
+                </a>
             </header>
 
             <div class="mt-5">
@@ -516,57 +576,69 @@
             </div>
         </article>
 
-    </section>
-
-    <section class="mt-5 grid grid-cols-[minmax(0,1fr)_470px] gap-5 max-[1180px]:grid-cols-1">
-        <article class="min-w-0 rounded-[14px] border border-[#e3e9f0] bg-white p-[22px] shadow-[0_8px_22px_rgb(35_63_92_/_4%)]">
+        <article class="mt-5 rounded-[14px] border border-[#e3e9f0] bg-white p-[22px] shadow-[0_8px_22px_rgb(35_63_92_/_4%)]" aria-labelledby="asset-item-condition-dashboard-title">
             <header class="flex flex-wrap items-start justify-between gap-3">
-                <div><h2 class="m-0 mb-[3px] text-[15px] font-extrabold text-[#20364f]">Aktivitas Aset</h2><p class="m-0 text-[10px] text-[#94a0af]">Pergerakan unit aset pada {{ $selectedActivityMonthLabel }}.</p></div>
-                <form method="GET" action="{{ route('dashboard') }}" class="flex items-center gap-2">
-                    @if (request()->has('tahun'))
-                        <input type="hidden" name="tahun" value="{{ request('tahun') }}">
-                    @endif
-                    <label for="activity_month" class="text-[9px] font-semibold text-[#617188]">Pilih Bulan</label>
-                    <select id="activity_month" name="activity_month" class="rounded-md border border-[#d9e2ec] bg-white px-2 py-1 text-[10px] font-semibold text-[#20364f] outline-none focus:border-[#2384c6]" style="font-size: 10px" onchange="this.form.submit()">
-                        @foreach (range(1, 12) as $monthNumber)
-                            @php($monthOption = \Carbon\Carbon::create(now()->year, $monthNumber, 1, 0, 0, 0, config('app.timezone')))
-                            <option value="{{ $monthOption->format('Y-m') }}" @selected($selectedActivityMonth === $monthOption->format('Y-m'))>{{ $monthOption->locale('id')->translatedFormat('F') }}</option>
-                        @endforeach
-                    </select>
-                </form>
-            </header>
-            <div class="mt-6 overflow-x-auto">
-                <div class="grid h-[230px] min-w-[600px] grid-cols-6 items-end gap-5 border-b border-[#e3e9f0] px-4 sm:gap-7">
-                    @foreach ($chartSeries as $series)
-                        @php($value = (int) ($chartItem[$series['key']] ?? 0))
-                        <div class="grid h-full grid-rows-[1fr_auto] justify-items-center gap-2">
-                            <div class="flex h-full flex-col items-center justify-end">
-                                <span class="mb-1 text-[10px] font-bold text-[#52657d]">{{ $number($value) }}</span>
-                                @if ($value > 0)
-                                    <span class="block w-7 rounded-t-[6px] {{ $series['color'] }} sm:w-8" title="{{ $series['label'] }} · {{ $selectedActivityMonthLabel }}: {{ $number($value) }} unit" style="height: {{ max(8, $value / $chartMaximum * 100) }}%"></span>
-                                @endif
-                            </div>
-                            <small class="max-w-[82px] text-center text-[10px] font-medium leading-4 text-[#617188]">{{ $series['label'] }}</small>
-                        </div>
-                    @endforeach
+                <div>
+                    <h3 class="m-0 text-[15px] font-extrabold text-[#20364f]" id="asset-item-condition-dashboard-title">Daftar Barang Berdasarkan Kondisi</h3>
+                    <p class="m-0 mt-1 text-[10px] text-[#94a0af]">Ringkasan jumlah unit dan kondisi setiap jenis barang.</p>
                 </div>
+                <div class="flex flex-wrap items-center gap-2 max-[580px]:w-full">
+                    <label class="sr-only" for="asset-item-condition-category">Filter kategori aset</label>
+                    <a class="page-action-button inline-flex min-h-[28px] items-center justify-center gap-1 rounded-[8px] border border-[#dbe3eb] bg-white px-2.5 text-[9px] font-bold text-[#146bb5] no-underline transition hover:border-[#9fc5df] hover:bg-[#f8fafc]" href="{{ route('dashboard.pdf', ['section' => 'barang-kondisi']) }}" data-asset-item-condition-pdf>
+                        <svg class="h-3 w-3 fill-none stroke-current stroke-[2] [stroke-linecap:round] [stroke-linejoin:round]" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14" /></svg>
+                        PDF
+                    </a>
+                </div>
+            </header>
+
+            <div class="mt-5">
+                @if ($assetItemsByCondition === [])
+                    <div class="grid min-h-[120px] place-items-center rounded-[12px] bg-[#f7f9fc] px-4 text-center text-[11px] font-semibold text-[#718095]">
+                        Belum ada aset aktif yang dapat ditampilkan.
+                    </div>
+                @else
+                    <div class="dashboard-inventory-scroll max-h-[340px] overflow-auto rounded-[12px] border border-[#edf1f5]">
+                        <table class="w-full min-w-[940px] border-collapse text-left">
+                            <thead class="sticky top-0 bg-[#f8fafc]">
+                                <tr>
+                                    <th class="w-[52px] px-3 py-2 text-center text-[9px] font-extrabold uppercase tracking-[.02em] text-[#7a899c]">No</th>
+                                    <th class="px-3 py-2 text-[9px] font-extrabold uppercase tracking-[.02em] text-[#7a899c]">Nama Barang</th>
+                                    <th class="px-3 py-2 text-[9px] font-extrabold uppercase tracking-[.02em] text-[#7a899c]">Kategori</th>
+                                    <th class="w-[92px] px-3 py-2 text-center text-[9px] font-extrabold uppercase tracking-[.02em] text-[#7a899c]">Total Unit</th>
+                                    <th class="w-[62px] px-2 py-2 text-center text-[9px] font-extrabold uppercase tracking-[.02em] text-[#7a899c]" title="B = Baik">B</th>
+                                    <th class="w-[62px] px-2 py-2 text-center text-[9px] font-extrabold uppercase tracking-[.02em] text-[#7a899c]" title="RR = Rusak Ringan">RR</th>
+                                    <th class="w-[62px] px-2 py-2 text-center text-[9px] font-extrabold uppercase tracking-[.02em] text-[#7a899c]" title="RS = Rusak Sedang">RS</th>
+                                    <th class="w-[62px] px-2 py-2 text-center text-[9px] font-extrabold uppercase tracking-[.02em] text-[#7a899c]" title="RB = Rusak Berat">RB</th>
+                                    <th class="w-[62px] px-2 py-2 text-center text-[9px] font-extrabold uppercase tracking-[.02em] text-[#7a899c]" title="TA = Tidak Ada (hasil pendataan)">TA</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach ($assetItemsByCondition as $itemIndex => $item)
+                                    <tr class="border-t border-[#edf1f5]" data-asset-item-condition-row data-category-id="{{ $item['category_id'] }}">
+                                        <td class="px-3 py-2 text-center text-[10px] text-[#718095]" data-asset-item-condition-number>{{ $itemIndex + 1 }}</td>
+                                        <td class="px-3 py-2"><strong class="text-[10px] font-extrabold text-[#263b52]">{{ $item['asset_name'] }}</strong></td>
+                                        <td class="px-3 py-2 text-[10px] font-semibold text-[#52657a]">{{ $item['category_name'] }}</td>
+                                        <td class="px-3 py-2 text-center text-[10px] font-extrabold text-[#0b2b50]">{{ $number($item['total']) }}</td>
+                                        <td class="px-2 py-2 text-center"><span class="condition-badge condition-baik px-2 py-1 text-[9px]">{{ $number($item['conditions']['baik'] ?? 0) }}</span></td>
+                                        <td class="px-2 py-2 text-center"><span class="condition-badge condition-rusak_ringan px-2 py-1 text-[9px]">{{ $number($item['conditions']['rusak_ringan'] ?? 0) }}</span></td>
+                                        <td class="px-2 py-2 text-center"><span class="condition-badge condition-rusak_sedang px-2 py-1 text-[9px]">{{ $number($item['conditions']['rusak_sedang'] ?? 0) }}</span></td>
+                                        <td class="px-2 py-2 text-center"><span class="condition-badge condition-rusak_berat px-2 py-1 text-[9px]">{{ $number($item['conditions']['rusak_berat'] ?? 0) }}</span></td>
+                                        <td class="px-2 py-2 text-center"><span class="condition-badge bg-[#eef2f7] px-2 py-1 text-[9px] text-[#52657a]">{{ $number($item['tidak_ada'] ?? 0) }}</span></td>
+                                    </tr>
+                                @endforeach
+                                <tr class="hidden border-t border-[#edf1f5]" data-asset-item-condition-empty>
+                                    <td class="px-4 py-8 text-center text-[11px] font-semibold text-[#718095]" colspan="9">Tidak ada barang yang sesuai pencarian atau kategori.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <p class="m-0 mt-2 text-[10px] text-[#94a0af]">B = Baik, RR = Rusak Ringan, RS = Rusak Sedang, RB = Rusak Berat, TA = Tidak Ada (hasil pendataan).</p>
+                @endif
             </div>
         </article>
 
-        <article class="min-w-0 rounded-[14px] border border-[#e3e9f0] bg-white p-[22px] shadow-[0_8px_22px_rgb(35_63_92_/_4%)]">
-            <header><h2 class="m-0 mb-[3px] text-[15px] font-extrabold text-[#20364f]">Kondisi Aset</h2><p class="m-0 text-[10px] text-[#94a0af]">{{ $number($totalCondition) }} unit aktif</p></header>
-            <div class="mx-auto mt-7 grid h-[174px] w-[174px] place-items-center rounded-full" style="background: conic-gradient(#3ca982 0 {{ $baikDeg }}deg,#d7a742 {{ $baikDeg }}deg {{ $rusakRinganDeg }}deg,#f97316 {{ $rusakRinganDeg }}deg {{ $rusakSedangDeg }}deg,#dc6b58 {{ $rusakSedangDeg }}deg {{ $rusakBeratDeg }}deg,#8b96a6 {{ $rusakBeratDeg }}deg 360deg)">
-                <div class="grid h-[118px] w-[118px] place-items-center rounded-full bg-white text-center">
-                    <div><strong class="block text-[26px] font-extrabold text-[#0b2b50]">{{ $baikPercent }}%</strong><span class="text-[10px] text-[#74839a]">kondisi baik</span></div>
-                </div>
-            </div>
-            <div class="mt-7 grid grid-cols-2 gap-3">
-                @foreach ($kondisiLabels as $key => [$label, $color])
-                    <div class="flex items-center gap-2 text-[11px] text-[#60708a]"><span class="h-2.5 w-2.5 rounded-full {{ $color }}"></span>{{ $label }}<strong class="ml-auto text-[#0b2b50]">{{ $number($kondisis[$key]) }}</strong></div>
-                @endforeach
-            </div>
-        </article>
     </section>
+
 </main>
 <script>
     document.addEventListener('DOMContentLoaded', () => {
@@ -628,6 +700,50 @@
                 chevron?.classList.toggle('rotate-90', nextExpanded)
             })
         })
+
+        const assetItemCategory = document.querySelector('[data-asset-item-condition-category]')
+
+        if (assetItemCategory) {
+            const rows = Array.from(document.querySelectorAll('[data-asset-item-condition-row]'))
+            const emptyState = document.querySelector('[data-asset-item-condition-empty]')
+            const pdfLink = document.querySelector('[data-asset-item-condition-pdf]')
+            const pdfUrl = pdfLink ? new URL(pdfLink.href, window.location.origin) : null
+
+            const applyAssetItemFilters = () => {
+                const categoryId = assetItemCategory.value
+                let visibleIndex = 1
+                let visibleCount = 0
+
+                rows.forEach((row) => {
+                    const matchesCategory = categoryId === '' || row.dataset.categoryId === categoryId
+                    const shouldShow = matchesCategory
+
+                    row.hidden = !shouldShow
+
+                    if (shouldShow) {
+                        const numberCell = row.querySelector('[data-asset-item-condition-number]')
+                        if (numberCell) numberCell.textContent = visibleIndex
+                        visibleIndex += 1
+                        visibleCount += 1
+                    }
+                })
+
+                emptyState?.classList.toggle('hidden', visibleCount > 0)
+
+                if (pdfLink && pdfUrl) {
+                    if (categoryId === '') {
+                        pdfUrl.searchParams.delete('kategori')
+                    } else {
+                        pdfUrl.searchParams.set('kategori', categoryId)
+                    }
+
+                    pdfLink.href = pdfUrl.toString()
+                }
+            }
+
+            assetItemCategory.addEventListener('change', applyAssetItemFilters)
+            applyAssetItemFilters()
+        }
     })
 </script>
 @endsection

@@ -99,13 +99,19 @@ class DashboardDataService
                 'selected_year' => $showAllReportYears ? null : $selectedReportYear,
                 'years' => $reportYears,
             ],
-            'report_monitoring_years' => collect($monitoringYears)->map(fn (int $year): array => [
-                'year' => $year,
-                'reconciliation' => $this->reconciliationMonthly($year),
-                'asset_reports' => $this->assetReportMonitoring($year),
-            ])->all(),
+            'report_monitoring_years' => collect($monitoringYears)->map(function (int $year): array {
+                $reconciliation = $this->reconciliationMonthly($year);
+
+                return [
+                    'year' => $year,
+                    'reconciliation' => $reconciliation,
+                    'asset_reports' => $this->assetReportMonitoring($year, $reconciliation),
+                    'inventory_reports' => $this->inventoryReportMonitoring($year),
+                ];
+            })->all(),
             'stock_opname_categories' => $this->stockOpnameCategories(),
             'asset_categories' => $this->assetCategorySummary(),
+            'asset_items_by_condition' => $this->assetItemsByCondition(),
             'kir_summary' => $this->kirSummary(),
             'workflow' => $workflow,
             'low_stock_assets' => $this->lowStockAssets($assets),
@@ -119,6 +125,12 @@ class DashboardDataService
     /** @return array{year: int, last_uploaded: ?string, missing_months: list<string>, required_month_count: int, months: list<array{label: string, status: string}>} */
     private function reconciliationMonthly(int $year): array
     {
+        return $this->reconciliationMonthlyForType($year, 'rekonsiliasi-bulanan');
+    }
+
+    /** @return array{year: int, last_uploaded: ?string, missing_months: list<string>, required_month_count: int, months: list<array{label: string, status: string}>} */
+    private function reconciliationMonthlyForType(int $year, string $reportType): array
+    {
         $now = now();
         $completedMonths = $year < $now->year
             ? range(1, 12)
@@ -127,7 +139,7 @@ class DashboardDataService
 
         if (Schema::hasTable('laporan_dokumen') && Schema::hasColumns('laporan_dokumen', ['jenis_laporan', 'tahun', 'bulan', 'periode'])) {
             $uploadedMonths = ReportDocument::query()
-                ->where('jenis_laporan', 'rekonsiliasi-bulanan')
+                ->where('jenis_laporan', $reportType)
                 ->where('tahun', $year)
                 ->get(['bulan', 'periode'])
                 ->map(function (ReportDocument $document): ?int {
@@ -186,14 +198,16 @@ class DashboardDataService
             ->translatedFormat($includeYear ? 'F Y' : 'F');
     }
 
-    /** @return list<array{label: string, uploaded_at: ?string}> */
-    private function assetReportMonitoring(int $year): array
+    /** @param array{year: int, last_uploaded: ?string, missing_months: list<string>, required_month_count: int, months: list<array{label: string, status: string}>} $reconciliation */
+    private function assetReportMonitoring(int $year, array $reconciliation): array
     {
         $reports = [
+            ['label' => 'Laporan Rekonsiliasi Bulanan', 'types' => [], 'monthly' => $reconciliation],
             ['label' => 'Laporan Semester 1', 'types' => ['semester-1'], 'berita_acara' => false],
             ['label' => 'Laporan Tahunan', 'types' => ['tahunan'], 'berita_acara' => false],
             ['label' => 'Laporan Aset Unaudited', 'types' => ['aset-unaudited'], 'berita_acara' => false],
             ['label' => 'Laporan Aset Audited', 'types' => ['aset-audited'], 'berita_acara' => false],
+            ['label' => 'Laporan RKBMD', 'types' => ['rkbmd'], 'berita_acara' => false, 'required_documents' => 2, 'distinct_periods' => true],
             ['label' => 'Berita Acara BMD', 'types' => ['berita-acara-bmd', 'berita_acara_bmd', 'berita-acara-pemakaian-bmd', 'berita-acara-serah-terima'], 'berita_acara' => true],
         ];
 
@@ -201,12 +215,27 @@ class DashboardDataService
             return collect($reports)->map(fn (array $report): array => [
                 'label' => $report['label'],
                 'uploaded_at' => null,
+                'is_complete' => false,
+                'detail' => null,
             ])->all();
         }
 
         $hasBeritaAcaraDate = Schema::hasColumn('laporan_dokumen', 'tanggal_berita_acara');
 
         return collect($reports)->map(function (array $report) use ($year, $hasBeritaAcaraDate): array {
+            if (isset($report['monthly'])) {
+                $monthly = $report['monthly'];
+                $uploaded = collect($monthly['months'])->where('status', 'uploaded')->count();
+                $required = (int) $monthly['required_month_count'];
+
+                return [
+                    'label' => $report['label'],
+                    'uploaded_at' => $monthly['last_uploaded'],
+                    'is_complete' => $required > 0 && $uploaded >= $required,
+                    'detail' => $uploaded.'/'.$required.' periode selesai diunggah',
+                ];
+            }
+
             $query = ReportDocument::query()->whereIn('jenis_laporan', $report['types']);
 
             if ($report['berita_acara'] && $hasBeritaAcaraDate) {
@@ -220,13 +249,48 @@ class DashboardDataService
                 $query->where('tahun', $year);
             }
 
-            $document = $query->latest('created_at')->first(['created_at']);
+            $documents = $query->latest('created_at')->get(['created_at', 'periode']);
+            $requiredDocuments = (int) ($report['required_documents'] ?? 1);
+            $document = $documents->first();
+            $documentCount = ($report['distinct_periods'] ?? false)
+                ? $documents->pluck('periode')->filter()->unique()->count()
+                : $documents->count();
 
             return [
                 'label' => $report['label'],
                 'uploaded_at' => $document?->created_at?->locale('id')->translatedFormat('d M Y, H:i'),
+                'is_complete' => $documentCount >= $requiredDocuments,
+                'detail' => $requiredDocuments > 1 ? $documentCount.'/'.$requiredDocuments.' periode diunggah' : null,
             ];
         })->all();
+    }
+
+    private function inventoryReportMonitoring(int $year): array
+    {
+        $monthly = $this->reconciliationMonthlyForType($year, 'persediaan-bulanan');
+        $reports = [
+            ['label' => 'Laporan Persediaan Bulanan', 'monthly' => $monthly],
+            ['label' => 'Laporan Persediaan Semester 1', 'types' => ['persediaan-semester-1']],
+            ['label' => 'Laporan Persediaan Tahunan', 'types' => ['persediaan-tahunan']],
+        ];
+
+        return [
+            'reports' => collect($reports)->map(function (array $report) use ($year): array {
+                if (isset($report['monthly'])) {
+                    $uploaded = collect($report['monthly']['months'])->where('status', 'uploaded')->count();
+                    $required = (int) $report['monthly']['required_month_count'];
+
+                    return ['label' => $report['label'], 'uploaded_at' => $report['monthly']['last_uploaded'], 'is_complete' => $required > 0 && $uploaded >= $required, 'detail' => $uploaded.'/'.$required.' periode selesai diunggah'];
+                }
+
+                $document = Schema::hasTable('laporan_dokumen')
+                    ? ReportDocument::query()->whereIn('jenis_laporan', $report['types'])->where('tahun', $year)->latest('created_at')->first(['created_at'])
+                    : null;
+
+                return ['label' => $report['label'], 'uploaded_at' => $document?->created_at?->locale('id')->translatedFormat('d M Y, H:i'), 'is_complete' => $document !== null, 'detail' => null];
+            })->all(),
+            'monthly' => $monthly,
+        ];
     }
 
     /** @return list<int> */
@@ -336,7 +400,107 @@ class DashboardDataService
             ->all();
     }
 
-    /** @return array{total_ruangan: int, total_penanggung_jawab: int, total_barang: int, kondisi: array<string, int>, kondisi_tidak_diketahui: int, ruangan: list<array{id: int, nama_ruangan: string, penanggung_jawab: string, jumlah_barang: int, kondisi: array<string, int>, kondisi_tidak_diketahui: int}>} */
+    /** @return list<array{category_id: int, category_name: string, asset_name: string, total: int, conditions: array<string, int>, tidak_ada: int}> */
+    private function assetItemsByCondition(): array
+    {
+        if (! Schema::hasTable('kategori_aset') || ! Schema::hasTable('aset')) {
+            return [];
+        }
+
+        $keyFor = static fn (?int $categoryId, string $assetName): string => ($categoryId ?? 0).'|'.mb_strtolower(trim($assetName));
+        $surveyCounts = $this->activeInventorySurveyCounts();
+        $categoryNames = AssetCategory::query()->pluck('nama_kategori', 'id');
+
+        $physicalItems = Asset::query()
+            ->whereNull('tanggal_penghapusan')
+            ->where('status_verifikasi', 'disetujui')
+            ->with(['category:id,nama_kategori', 'conditionStocks:id,asset_id,kondisi,jumlah'])
+            ->get(['id', 'kategori_aset_id', 'nama_aset', 'jumlah', 'kondisi'])
+            ->groupBy(function (Asset $asset) use ($keyFor): string {
+                $assetName = trim((string) $asset->nama_aset);
+
+                return $keyFor((int) $asset->kategori_aset_id, $assetName);
+            })
+            ->map(function (Collection $assets) use ($keyFor, $surveyCounts): array {
+                /** @var Asset $first */
+                $first = $assets->first();
+                $conditions = $this->emptyConditionSummary();
+                $assetName = trim((string) $first->nama_aset) ?: '-';
+
+                foreach ($assets as $asset) {
+                    foreach ($asset->condition_stock_summary as $condition => $quantity) {
+                        if (array_key_exists($condition, $conditions)) {
+                            $conditions[$condition] += (int) $quantity;
+                        }
+                    }
+                }
+
+                return [
+                    'category_id' => (int) $first->kategori_aset_id,
+                    'category_name' => $first->category?->nama_kategori ?: '-',
+                    'asset_name' => $assetName,
+                    'total' => array_sum($conditions),
+                    'conditions' => $conditions,
+                    'tidak_ada' => (int) ($surveyCounts->get($keyFor((int) $first->kategori_aset_id, $assetName))['total'] ?? 0),
+                ];
+            });
+
+        $surveyOnlyItems = $surveyCounts
+            ->reject(fn (array $survey, string $key): bool => $physicalItems->has($key))
+            ->map(function (array $survey, string $key) use ($categoryNames): array {
+                [$categoryId] = explode('|', $key, 2);
+
+                return [
+                    'category_id' => (int) $categoryId,
+                    'category_name' => $categoryNames->get((int) $categoryId, '-'),
+                    'asset_name' => filled($survey['asset_name']) ? $survey['asset_name'] : '-',
+                    'total' => 0,
+                    'conditions' => $this->emptyConditionSummary(),
+                    'tidak_ada' => $survey['total'],
+                ];
+            });
+
+        return $physicalItems
+            ->concat($surveyOnlyItems)
+            ->sortBy([
+                ['asset_name', 'asc'],
+                ['category_name', 'asc'],
+            ], SORT_NATURAL | SORT_FLAG_CASE)
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Count active zero-unit survey rows without joining assets, so each survey
+     * record is counted once and never becomes part of a physical asset total.
+     *
+     * @return Collection<string, array{total: int, asset_name: string}>
+     */
+    private function activeInventorySurveyCounts(): Collection
+    {
+        $requiredColumns = ['kategori_aset_id', 'nama_barang', 'jumlah'];
+
+        if (! Schema::hasTable('asset_inventory_surveys') || ! Schema::hasColumns('asset_inventory_surveys', $requiredColumns)) {
+            return collect();
+        }
+
+        $hasFollowUpStatus = Schema::hasColumn('asset_inventory_surveys', 'status');
+
+        return DB::table('asset_inventory_surveys')
+            ->select('kategori_aset_id', 'nama_barang', DB::raw('COUNT(*) as total_tidak_ada'))
+            ->where('jumlah', 0)
+            ->when($hasFollowUpStatus, fn ($query) => $query->where('status', 'aktif'))
+            ->groupBy('kategori_aset_id', 'nama_barang')
+            ->get()
+            ->mapWithKeys(fn ($row): array => [
+                ((int) ($row->kategori_aset_id ?? 0)).'|'.mb_strtolower(trim((string) $row->nama_barang)) => [
+                    'total' => (int) $row->total_tidak_ada,
+                    'asset_name' => trim((string) $row->nama_barang),
+                ],
+            ]);
+    }
+
+    /** @return array{total_ruangan: int, total_penanggung_jawab: int, total_barang: int, kondisi: array<string, int>, kondisi_tidak_diketahui: int, ruangan: list<array{id: int, nama_ruangan: string, kode_ruangan: ?string, penanggung_jawab: string, jumlah_barang: int, kondisi: array<string, int>, kondisi_tidak_diketahui: int}>} */
     private function kirSummary(): array
     {
         $empty = [
@@ -362,7 +526,7 @@ class DashboardDataService
             ])
             ->where('status', 'aktif')
             ->orderBy('nama_ruangan')
-            ->get()
+            ->get(['id', 'nama_ruangan', 'kode_ruangan'])
             ->values();
 
         $grandConditions = $this->emptyConditionSummary();
@@ -404,6 +568,7 @@ class DashboardDataService
             $roomSummaries[] = [
                 'id' => (int) $room->id,
                 'nama_ruangan' => $room->nama_ruangan,
+                'kode_ruangan' => $room->kode_ruangan,
                 'penanggung_jawab' => $kir?->penanggungJawab?->name ?? '-',
                 'jumlah_barang' => $roomItemTotal,
                 'kondisi' => $roomConditions,

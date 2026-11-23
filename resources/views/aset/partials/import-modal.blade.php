@@ -36,7 +36,7 @@
                     <input type="hidden" name="token" value="{{ $diskominfoImportToken }}">
                     <div><h3 class="m-0 text-base font-extrabold text-[#0b2b50]">Preview Inventaris Diskominfo</h3><p class="mt-1 text-[11px] text-[#6e7d91]">Pilih kategori setiap worksheet, lalu selesaikan koreksi yang ditandai. Tidak ada aset yang telah disimpan.</p></div>
                     <div class="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
-                        @foreach (['total' => 'Total Baris', 'valid' => 'Valid Otomatis', 'corrected' => 'Terkoreksi Manual', 'warning' => 'Peringatan', 'error' => 'Error Tersisa', 'skipped' => 'Dilewati', 'units' => 'Unit Dibuat'] as $key => $label)
+                        @foreach (['total' => 'Total Baris', 'valid' => 'Valid Otomatis', 'corrected' => 'Terkoreksi Manual', 'warning' => 'Peringatan', 'survey' => 'Pendataan 0 Unit', 'error' => 'Error Tersisa', 'units' => 'Unit Aset Fisik'] as $key => $label)
                             <div class="rounded-lg border border-[#e0e8f0] bg-[#f8fafc] px-3 py-2"><span class="block text-[9px] font-bold uppercase tracking-wide text-[#718197]">{{ $label }}</span><strong class="text-sm text-[#16395e]">{{ $preview['summary'][$key] ?? 0 }}</strong></div>
                         @endforeach
                     </div>

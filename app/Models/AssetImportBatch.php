@@ -24,4 +24,9 @@ class AssetImportBatch extends Model
     {
         return $this->hasMany(Asset::class, 'asset_import_batch_id');
     }
+
+    public function inventorySurveys(): HasMany
+    {
+        return $this->hasMany(AssetInventorySurvey::class, 'asset_import_batch_id');
+    }
 }

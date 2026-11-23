@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Enums\AssetCondition;
 use App\Enums\AssetMaintenanceStatus;
+use App\Enums\WorkUnit;
 use App\Http\Requests\Maintenance\CompleteAssetMaintenanceRequest;
 use App\Http\Requests\Maintenance\StoreAssetMaintenanceRequest;
 use App\Http\Requests\Maintenance\UpdateAssetMaintenanceRequest;
@@ -537,7 +538,7 @@ class AssetMaintenanceController extends Controller
     private function maintenanceOptions()
     {
         return Asset::query()
-            ->with(['category', 'kodeBarang', 'conditionStocks'])
+            ->with(['category', 'kodeBarang', 'conditionStocks', 'assetHolder'])
             ->whereNull('tanggal_penghapusan')
             ->where('status_verifikasi', 'disetujui')
             ->orderBy('nama_aset')
@@ -560,15 +561,25 @@ class AssetMaintenanceController extends Controller
 
                         return collect(range(1, $available))->map(function (int $index) use ($asset, $condition, $total, $active) {
                             $unitNumber = $active + $index;
+                            $holderName = filled($asset->assetHolder?->nama_pegawai)
+                                ? $asset->assetHolder->nama_pegawai
+                                : 'Belum ada pemegang';
+                            $workUnit = filled($asset->assetHolder?->unit_kerja)
+                                ? WorkUnit::labelFor($asset->assetHolder->unit_kerja)
+                                : 'Unit kerja belum tersedia';
+
+                            if ($workUnit === '-') {
+                                $workUnit = 'Unit kerja belum tersedia';
+                            }
 
                             return [
                                 'value' => $asset->id.'|'.$condition->value.'|'.$unitNumber,
                                 'label' => sprintf(
-                                    '%s - %s / %s / %s / %s / Unit %d dari %d',
+                                    '%s - %s | %s | %s | %s | Unit %d dari %d',
                                     $asset->display_code,
                                     $asset->nama_aset,
-                                    $asset->merek_tipe ?: '-',
-                                    $asset->lokasi_penyimpanan ?: '-',
+                                    $holderName,
+                                    $workUnit,
                                     $condition->label(),
                                     $unitNumber,
                                     $total,

@@ -4,10 +4,12 @@ namespace App\Http\Controllers;
 
 use App\Enums\LoanStatus;
 use App\Http\Requests\AssetRequest;
+use App\Http\Requests\StoreInventorySurveyAssetRequest;
 use App\Http\Requests\UpdateAssetConditionRequest;
 use App\Models\Asset;
 use App\Models\AssetCategory;
 use App\Models\AssetHolder;
+use App\Models\AssetInventorySurvey;
 use App\Models\KodeBarang;
 use App\Models\Ruangan;
 use App\Models\StockOpnameItem;
@@ -16,6 +18,7 @@ use App\Services\DiskominfoAssetImportService;
 use App\Services\KodeInternalService;
 use App\Services\RiwayatPersetujuanService;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -201,6 +204,78 @@ class AssetController extends Controller
         $asset->update(['tanggal_penghapusan' => now()]);
 
         return back()->with('success', 'Aset berhasil dinonaktifkan dari daftar aset aktif.');
+    }
+
+    public function recordInventorySurveyAsset(StoreInventorySurveyAssetRequest $request, AssetInventorySurvey $inventorySurvey, KodeInternalService $kodeInternalService, AssetConditionStockService $conditionStockService): RedirectResponse
+    {
+        $validated = $request->validated();
+
+        $asset = DB::transaction(function () use ($request, $inventorySurvey, $validated, $kodeInternalService, $conditionStockService): Asset {
+            $survey = AssetInventorySurvey::query()->lockForUpdate()->findOrFail($inventorySurvey->id);
+
+            if ($survey->status !== 'aktif') {
+                throw ValidationException::withMessages([
+                    'survey' => 'Catatan pendataan ini sudah ditindaklanjuti dan tidak dapat dicatat kembali sebagai aset.',
+                ]);
+            }
+
+            $holderId = $survey->pemegang_aset_id ?: ($validated['pemegang_aset_id'] ?? null);
+            if ($holderId && ! AssetHolder::query()->whereKey($holderId)->where('is_active', true)->exists()) {
+                throw ValidationException::withMessages([
+                    'pemegang_aset_id' => 'Pemegang aset yang dipilih tidak aktif atau tidak tersedia.',
+                ]);
+            }
+
+            $isPotentialDuplicate = $holderId && Asset::query()
+                ->whereNull('tanggal_penghapusan')
+                ->where('pemegang_aset_id', $holderId)
+                ->where('kategori_aset_id', $validated['kategori_aset_id'])
+                ->whereRaw('LOWER(nama_aset) = ?', [mb_strtolower($survey->nama_barang)])
+                ->exists();
+
+            if ($isPotentialDuplicate && ! ($validated['confirm_duplicate'] ?? false)) {
+                throw ValidationException::withMessages([
+                    'confirm_duplicate' => 'Pegawai ini sudah memiliki aset dengan nama dan kategori yang sama. Konfirmasikan bahwa barang ini merupakan unit aset yang berbeda dan belum pernah tercatat dalam sistem.',
+                ]);
+            }
+
+            $asset = Asset::query()->create([
+                'kategori_aset_id' => $validated['kategori_aset_id'],
+                'nama_aset' => $survey->nama_barang,
+                'spesifikasi' => $validated['spesifikasi'] ?? null,
+                'catatan_kondisi' => $validated['catatan_kondisi'] ?? $survey->catatan_kerusakan,
+                'jumlah' => 1,
+                'tahun_perolehan' => $validated['tahun_perolehan'] ?? null,
+                'kondisi' => $validated['kondisi'],
+                'pemegang_aset_id' => $holderId,
+                'status_verifikasi' => 'disetujui',
+                'tanggal_verifikasi' => now(),
+                'diverifikasi_oleh' => null,
+                'catatan_verifikasi' => 'Disetujui otomatis melalui tindak lanjut hasil pendataan inventaris.',
+            ]);
+
+            $conditionStockService->resetToMainCondition($asset);
+            app(RiwayatPersetujuanService::class)->record(
+                'asset_verification',
+                $asset,
+                'pendataan_inventaris',
+                'disetujui_otomatis',
+                'Aset dicatat dari hasil pendataan inventaris: '.$survey->nama_sheet.' baris '.$survey->baris_excel.'.',
+                $request->user(),
+            );
+            $kodeInternalService->generate($asset);
+
+            $survey->update([
+                'status' => 'sudah_dicatat',
+                'ditindaklanjuti_pada' => now(),
+                'ditindaklanjuti_oleh' => $request->user()?->id,
+                'asset_id' => $asset->id,
+            ]);
+
+            return $asset;
+        });
+
+        return redirect()->route('web.aset.index')->with('success', 'Aset '.$asset->kode_internal.' berhasil dicatat dari hasil pendataan dan disetujui otomatis.');
     }
 
     public function updateCondition(UpdateAssetConditionRequest $request, Asset $asset): RedirectResponse
@@ -595,7 +670,34 @@ class AssetController extends Controller
         unset($imports[$request->string('token')->toString()]);
         $request->session()->put('diskominfo_asset_imports', $imports);
 
-        return back()->with('success', $total.' unit aset Inventaris Diskominfo berhasil diimport dan langsung disetujui.');
+        return back()->with('success', $total['assets'].' unit aset fisik dan '.$total['surveys'].' hasil pendataan Inventaris Diskominfo berhasil disimpan.');
+    }
+
+    public function inventorySurveyIndex(Request $request): View
+    {
+        $perPage = min(max($request->integer('per_page', 10), 1), 100);
+        $surveys = AssetInventorySurvey::query()
+            ->with(['assetHolder', 'category'])
+            ->when($request->filled('search'), function (Builder $query) use ($request): void {
+                $search = $request->string('search')->toString();
+                $query->where(fn (Builder $query) => $query
+                    ->where('nama_barang', 'like', "%{$search}%")
+                    ->orWhere('nama_pegawai_excel', 'like', "%{$search}%")
+                    ->orWhereHas('assetHolder', fn (Builder $holderQuery) => $holderQuery->where('nama_pegawai', 'like', "%{$search}%")));
+            })
+            ->when($request->integer('kategori_id'), fn (Builder $query, int $categoryId) => $query->where('kategori_aset_id', $categoryId))
+            ->when($request->filled('unit_kerja'), fn (Builder $query) => $query->where('unit_kerja_excel', $request->string('unit_kerja')->toString()))
+            ->orderByDesc('created_at')
+            ->orderBy('nama_sheet')
+            ->orderBy('baris_excel')
+            ->paginate($perPage)
+            ->withQueryString();
+
+        return view('aset.inventory-surveys', [
+            'surveys' => $surveys,
+            'categories' => AssetCategory::query()->orderBy('nama_kategori')->get(['id', 'nama_kategori']),
+            'units' => AssetInventorySurvey::query()->whereNotNull('unit_kerja_excel')->distinct()->orderBy('unit_kerja_excel')->pluck('unit_kerja_excel'),
+        ]);
     }
 
     public function importTemplate()
@@ -633,7 +735,14 @@ class AssetController extends Controller
     private function renderList(Request $request, string $view, bool $verificationMode = false): View
     {
         $perPage = min(max($request->integer('per_page', 10), 1), 100);
-        $assets = $this->withStockCounts(Asset::query())
+        $condition = $request->string('kondisi')->toString();
+        $surveyMode = ! $verificationMode && $condition === 'tidak_ada';
+        $includeSurveyRecords = ! $verificationMode
+            && ! $request->filled('status_verifikasi')
+            && in_array($condition, ['', 'tidak_ada'], true);
+        $includePhysicalAssets = $condition !== 'tidak_ada';
+
+        $assetQuery = Asset::query()
             ->with('category')
             ->with('assetHolder')
             ->with('kodeBarang')
@@ -646,23 +755,87 @@ class AssetController extends Controller
                     ->where('kode_internal', 'like', "%{$search}%")
                     ->orWhere('nama_aset', 'like', "%{$search}%")
                     ->orWhere('merek_tipe', 'like', "%{$search}%")
+                    ->orWhereHas('assetHolder', fn (Builder $holderQuery) => $holderQuery->where('nama_pegawai', 'like', "%{$search}%"))
                     ->orWhereHas('kodeBarang', fn (Builder $query) => $query
                         ->where('kode_barang', 'like', "%{$search}%")
                         ->orWhere('nama_barang', 'like', "%{$search}%")));
             })
             ->when($request->integer('kategori_id'), fn (Builder $query, int $categoryId) => $query->where('kategori_aset_id', $categoryId))
-            ->when($request->filled('kondisi'), fn (Builder $query) => $query->whereHas('conditionStocks', fn (Builder $query) => $query
-                ->where('kondisi', $request->string('kondisi'))
+            ->when($condition !== '', fn (Builder $query) => $query->whereHas('conditionStocks', fn (Builder $query) => $query
+                ->where('kondisi', $condition)
                 ->where('jumlah', '>', 0)))
-            ->when($request->filled('status_verifikasi'), fn (Builder $query) => $query->where('status_verifikasi', $request->string('status_verifikasi')))
-            ->orderBy('nama_aset')
-            ->paginate($perPage)
-            ->withQueryString();
+            ->when($request->filled('status_verifikasi'), fn (Builder $query) => $query->where('status_verifikasi', $request->string('status_verifikasi')));
+
+        if ($includeSurveyRecords && $includePhysicalAssets) {
+            $assetRows = (clone $assetQuery)->reorder()->selectRaw("id as record_id, 'asset' as record_type, nama_aset as sort_name");
+            $surveyRows = AssetInventorySurvey::query()
+                ->where('status', 'aktif')
+                ->when($request->filled('search'), function (Builder $query) use ($request): void {
+                    $search = $request->string('search')->toString();
+                    $query->where(fn (Builder $query) => $query
+                        ->where('nama_barang', 'like', "%{$search}%")
+                        ->orWhere('nama_pegawai_excel', 'like', "%{$search}%")
+                        ->orWhereHas('assetHolder', fn (Builder $holderQuery) => $holderQuery->where('nama_pegawai', 'like', "%{$search}%")));
+                })
+                ->when($request->integer('kategori_id'), fn (Builder $query, int $categoryId) => $query->where('kategori_aset_id', $categoryId))
+                ->selectRaw("id as record_id, 'survey' as record_type, nama_barang as sort_name");
+
+            /** @var LengthAwarePaginator $page */
+            $page = DB::query()->fromSub($assetRows->toBase()->unionAll($surveyRows->toBase()), 'master_rows')
+                ->orderBy('sort_name')
+                ->orderBy('record_type')
+                ->orderBy('record_id')
+                ->paginate($perPage)
+                ->withQueryString();
+
+            $assetIds = $page->getCollection()->where('record_type', 'asset')->pluck('record_id')->all();
+            $surveyIds = $page->getCollection()->where('record_type', 'survey')->pluck('record_id')->all();
+            $assetsById = $this->withStockCounts((clone $assetQuery)->whereKey($assetIds))->get()->keyBy('id');
+            $surveysById = AssetInventorySurvey::query()->with(['assetHolder', 'category'])->whereIn('id', $surveyIds)->get()->keyBy('id');
+
+            $assets = $page->setCollection($page->getCollection()->map(fn ($row) => $row->record_type === 'asset'
+                ? $assetsById->get($row->record_id)
+                : $surveysById->get($row->record_id))->filter()->values());
+        } elseif ($includeSurveyRecords) {
+            $assets = AssetInventorySurvey::query()
+                ->with(['assetHolder', 'category'])
+                ->where('status', 'aktif')
+                ->when($request->filled('search'), function (Builder $query) use ($request): void {
+                    $search = $request->string('search')->toString();
+                    $query->where(fn (Builder $query) => $query
+                        ->where('nama_barang', 'like', "%{$search}%")
+                        ->orWhere('nama_pegawai_excel', 'like', "%{$search}%")
+                        ->orWhereHas('assetHolder', fn (Builder $holderQuery) => $holderQuery->where('nama_pegawai', 'like', "%{$search}%")));
+                })
+                ->when($request->integer('kategori_id'), fn (Builder $query, int $categoryId) => $query->where('kategori_aset_id', $categoryId))
+                ->orderBy('nama_barang')->orderBy('id')->paginate($perPage)->withQueryString();
+        } else {
+            $assets = $this->withStockCounts($assetQuery)->orderBy('nama_aset')->paginate($perPage)->withQueryString();
+        }
 
         $activeAssetHolders = AssetHolder::query()
             ->where('is_active', true)
             ->orderBy('nama_pegawai')
             ->get(['id', 'nama_pegawai', 'nip', 'is_active']);
+
+        $surveyNames = $assets->getCollection()
+            ->filter(fn ($item): bool => $item instanceof AssetInventorySurvey)
+            ->map(fn (AssetInventorySurvey $survey): string => mb_strtolower(trim($survey->nama_barang)))
+            ->filter()
+            ->unique()
+            ->values();
+
+        $surveyDuplicateKeys = $surveyNames->isEmpty()
+            ? []
+            : Asset::query()
+                ->whereNull('tanggal_penghapusan')
+                ->whereNotNull('pemegang_aset_id')
+                ->whereIn(DB::raw('LOWER(nama_aset)'), $surveyNames->all())
+                ->get(['kategori_aset_id', 'pemegang_aset_id', 'nama_aset'])
+                ->map(fn (Asset $asset): string => $this->surveyDuplicateKey((int) $asset->kategori_aset_id, (int) $asset->pemegang_aset_id, $asset->nama_aset))
+                ->unique()
+                ->values()
+                ->all();
 
         return view($view, [
             'assets' => $assets,
@@ -676,7 +849,14 @@ class AssetController extends Controller
             'verificationMode' => $verificationMode,
             'conditions' => $this->conditionOptions(),
             'verificationOptions' => $this->verificationOptions(),
+            'surveyMode' => $surveyMode,
+            'surveyDuplicateKeys' => $surveyDuplicateKeys,
         ]);
+    }
+
+    private function surveyDuplicateKey(int $categoryId, int $holderId, string $assetName): string
+    {
+        return $categoryId.'|'.$holderId.'|'.mb_strtolower(trim($assetName));
     }
 
     private function masterStockOpnameItems(Request $request)
@@ -753,6 +933,7 @@ class AssetController extends Controller
             'rusak_sedang' => 'Rusak Sedang',
             'rusak_berat' => 'Rusak Berat',
             'hilang' => 'Hilang',
+            'tidak_ada' => 'Tidak Ada',
         ];
     }
 

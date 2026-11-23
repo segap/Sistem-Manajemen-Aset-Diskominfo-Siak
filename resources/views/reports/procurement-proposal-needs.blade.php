@@ -39,29 +39,32 @@
         <thead>
             <tr>
                 <th style="width: 4%">NO</th>
-                <th style="width: 18%">URAIAN</th>
-                <th style="width: 25%">SPEK</th>
+                <th style="width: 17%">URAIAN</th>
+                <th style="width: 20%">SPEK</th>
                 <th style="width: 7%">JUMLAH</th>
-                <th style="width: 13%">HARGA</th>
-                <th style="width: 15%">LINK/GAMBAR</th>
-                <th style="width: 18%">KETERANGAN/PENANGGUNG JAWAB</th>
+                <th style="width: 12%">HARGA</th>
+                <th style="width: 13%">TOTAL</th>
+                <th style="width: 12%">LINK/GAMBAR</th>
+                <th style="width: 15%">KETERANGAN/PENANGGUNG JAWAB</th>
             </tr>
         </thead>
         <tbody>
             @foreach ($details as $detail)
+                @php($detailTotal = (int) $detail->jumlah * (float) $detail->estimasi_harga_satuan)
                 <tr>
                     <td class="center">{{ $detail->nomor_urut }}</td>
                     <td>{{ $detail->nama_barang ?: '-' }}</td>
                     <td>{{ $detail->spesifikasi ?: '-' }}</td>
                     <td class="center">{{ $detail->jumlah ?: '-' }}</td>
                     <td class="right">{{ $detail->estimasi_harga_satuan !== null ? $formatCurrency($detail->estimasi_harga_satuan) : '-' }}</td>
+                    <td class="right">{{ $detail->estimasi_harga_satuan !== null ? $formatCurrency($detailTotal) : '-' }}</td>
                     <td>@if ($isValidUrl($detail->link_produk ?? null))<a class="link" href="{{ $detail->link_produk }}">{{ $detail->link_produk }}</a>@else - @endif</td>
                     @php($responsibleName = ($detail->responsibleAssetHolder ?? null)?->nama_pegawai ?: ($detail->responsiblePerson ?? null)?->name)
                     <td>@if ($detail->keterangan)<div>{{ $detail->keterangan }}</div>@endif @if ($responsibleName)<div><strong>PJ:</strong> {{ $responsibleName }}</div>@endif @if (! $detail->keterangan && ! $responsibleName)-@endif</td>
                 </tr>
             @endforeach
             <tr>
-                <td colspan="5" class="total-label">TOTAL ESTIMASI ANGGARAN</td>
+                <td colspan="6" class="total-label">TOTAL ESTIMASI ANGGARAN</td>
                 <td colspan="2" class="total-value">{{ $formatCurrency($totalEstimate) }}</td>
             </tr>
         </tbody>

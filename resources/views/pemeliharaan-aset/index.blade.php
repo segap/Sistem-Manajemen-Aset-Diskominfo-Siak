@@ -106,6 +106,7 @@
                         <th>Prioritas</th>
                         <th>Status</th>
                         <th>Tanggal Pengajuan</th>
+                        <th>Catatan Kerusakan</th>
                         <th class="action-column">Aksi</th>
                     </tr>
                 </thead>
@@ -123,6 +124,7 @@
                             <td><span class="loan-status {{ $priorityClass($maintenance->prioritas) }}">{{ $maintenance->prioritas?->label() ?: '-' }}</span></td>
                             <td><span class="loan-status {{ $statusClass($maintenance->status) }}">{{ $maintenance->status->label() }}</span></td>
                             <td>{{ $maintenance->tanggal_pengajuan?->translatedFormat('d M Y H:i') }}</td>
+                            <td>{{ $maintenance->catatan_pengajuan ?: '-' }}</td>
                             <td class="action-column">
                                 <div class="row-actions">
                                     <button type="button" data-modal-open="detail-maintenance-{{ $maintenance->id }}" title="Detail"><svg viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Zm10 3a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" /></svg></button>

@@ -67,6 +67,11 @@ class Asset extends Model
         return $this->belongsTo(AssetImportBatch::class, 'asset_import_batch_id');
     }
 
+    public function inventorySurvey(): HasOne
+    {
+        return $this->hasOne(AssetInventorySurvey::class, 'asset_id');
+    }
+
     /** @return HasMany<AssetConditionStock, $this> */
     public function conditionStocks(): HasMany
     {
